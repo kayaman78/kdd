@@ -16,7 +16,7 @@
 #     --network bridge \
 #     ddd:latest /app/backup.sh
 #
-# GitHub: https://github.com/yourusername/ddd
+# GitHub: https://github.com/kayaman78/ddd
 # License: MIT
 # =============================================================================
 
