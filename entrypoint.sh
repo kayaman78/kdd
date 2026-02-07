@@ -46,7 +46,7 @@ fi
 
 # Detect Docker socket GID and add user to that group (for docker ps/inspect)
 if [ -S /var/run/docker.sock ]; then
-    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "999")
     echo "[entrypoint] Docker socket detected with GID $DOCKER_SOCK_GID"
     
     # Create docker group with that GID if it doesn't exist
