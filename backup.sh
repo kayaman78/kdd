@@ -129,7 +129,7 @@ init_log() {
     mkdir -p "$(dirname "$LOG_FILE")"
     
     # Rotate log if larger than 10MB
-    if [ -f "$LOG_FILE" ] && [ $(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE") -gt 10485760 ]; then
+    if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 10485760 ]; then
         mv "$LOG_FILE" "${LOG_FILE}.old"
     fi
     
