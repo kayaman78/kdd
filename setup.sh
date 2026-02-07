@@ -107,7 +107,7 @@ add_entry_if_missing() {
         shift
     done
     
-    log "  ✔️ Added $name to configuration"
+    log "  Added $name to configuration"
 }
 
 # Ask for confirmation in interactive mode
@@ -118,7 +118,7 @@ ask_confirm() {
     
     # In interactive mode, ask for confirmation
     local prompt="$1"
-    read -p "$prompt (y/N) " resp < /dev/tty
+    read -p "$prompt (y/N) " resp
     [[ "$resp" =~ ^[yY]$ ]]
 }
 
@@ -159,7 +159,7 @@ postgres: []
 mongo: []
 redis: []
 EOF
-    log "✔️ Created config.yaml"
+    log "Created config.yaml"
 fi
 
 # -----------------------------------------------------------------------------
@@ -206,7 +206,7 @@ while IFS= read -r container; do
     # MYSQL / MARIADB
     # -------------------------------------------------------------------------
     if echo "$image" | grep -qiE 'mysql|mariadb'; then
-        log "  🔍 Detected MySQL/MariaDB"
+        log "  Detected MySQL/MariaDB"
         
         # Extract credentials from environment variables
         root_pass=$(get_container_env "$container" "MYSQL_ROOT_PASSWORD")
@@ -228,7 +228,7 @@ while IFS= read -r container; do
             user="$db_user"
             pass="$db_pass"
         else
-            log "Credentials not found in env, skipping"
+            log "  Credentials not found in env, skipping"
             echo
             continue
         fi
@@ -236,7 +236,7 @@ while IFS= read -r container; do
         # Database name (use stackname if not specified)
         db_name=${db_name:-$stackname}
         
-        log "Found: user=$user, db=$db_name"
+        log "  Found: user=$user, db=$db_name"
         
         # In interactive mode, ask for confirmation
         if ! ask_confirm "  Add $container to config?"; then
@@ -259,21 +259,21 @@ while IFS= read -r container; do
     # POSTGRESQL
     # -------------------------------------------------------------------------
     if echo "$image" | grep -qiE 'postgres'; then
-        log "  🔍 Detected PostgreSQL"
+        log "  Detected PostgreSQL"
         
         db_name=$(get_container_env "$container" "POSTGRES_DB")
         db_user=$(get_container_env "$container" "POSTGRES_USER")
         db_pass=$(get_container_env "$container" "POSTGRES_PASSWORD")
         
         if [ -z "$db_user" ] || [ -z "$db_pass" ]; then
-            log "Credentials not found, skipping"
+            log "  Credentials not found, skipping"
             echo
             continue
         fi
         
         db_name=${db_name:-$stackname}
         
-        log "Found: user=$db_user, db=$db_name"
+        log "  Found: user=$db_user, db=$db_name"
         
         if ! ask_confirm "  Add $container to config?"; then
             echo
@@ -294,7 +294,7 @@ while IFS= read -r container; do
     # MONGODB
     # -------------------------------------------------------------------------
     if echo "$image" | grep -qiE 'mongo'; then
-        log "  🔍 Detected MongoDB"
+        log "  Detected MongoDB"
         
         # MongoDB can use various env formats - try all variants
         db_user=$(get_container_env "$container" "MONGO_INITDB_ROOT_USERNAME")
@@ -318,7 +318,7 @@ while IFS= read -r container; do
         fi
         
         if [ -z "$db_user" ] || [ -z "$db_pass" ]; then
-            log "Credentials not found, skipping"
+            log "  Credentials not found, skipping"
             echo
             continue
         fi
@@ -326,7 +326,7 @@ while IFS= read -r container; do
         # Database name: try various conventions, otherwise use stackname
         db_name=${db_name:-$stackname}
         
-        log "Found: user=$db_user, db=$db_name"
+        log "  Found: user=$db_user, db=$db_name"
         
         if ! ask_confirm "  Add $container to config?"; then
             echo
@@ -350,9 +350,9 @@ while IFS= read -r container; do
     # Note: Redis is usually used as cache, not persistent storage
     # Only enable if you have Redis with persistent data (AOF/RDB)
     if echo "$image" | grep -qiE 'redis|valkey'; then
-        log "Detected Redis/Valkey"
-        log "Redis backup skipped (typically used as cache)"
-        log "If you need Redis backup, enable it manually in config"
+        log "  Detected Redis/Valkey"
+        log "  Redis backup skipped (typically used as cache)"
+        log "  If you need Redis backup, enable it manually in config"
         
         # Uncomment below to enable Redis backup
         : <<'REDIS_DISABLED'
@@ -381,7 +381,7 @@ done <<< "$containers"
 # -----------------------------------------------------------------------------
 echo
 log "=========================================="
-log "✔️ Setup completed!"
+log "Setup completed!"
 log "=========================================="
 log ""
 log "Configuration saved to: $CONFIG"
@@ -410,7 +410,7 @@ fi
 
 log "Next steps:"
 log "1. Review config: cat $CONFIG"
-log "2. Test backup:   ./backup.sh"
+log "2. Test backup:   /app/backup.sh"
 log "3. Setup cron for automated backups"
 log ""
 
