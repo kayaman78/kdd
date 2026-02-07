@@ -67,7 +67,7 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
 # Add MongoDB official repository for version 8.x tools
 # IMPORTANT: If using MongoDB 7.x or older, change "8.0" to your version
 RUN curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | \
-    gpg --dearmor -o /usr/share/keyrings/mongodb-archive-keyring.gpg && \
+    gpp --dearmor -o /usr/share/keyrings/mongodb-archive-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/mongodb-archive-keyring.gpg] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/8.0 main" | \
     tee /etc/apt/sources.list.d/mongodb-org-8.0.list
 
