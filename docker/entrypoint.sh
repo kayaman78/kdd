@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Entrypoint - User Permission Handler (LinuxServer.io Style)
+# KDD Entrypoint - User Permission Handler
 # =============================================================================
 # Creates a user with specified PUID/PGID and executes commands as that user
 # instead of root, preventing permission issues with generated files.
@@ -13,7 +13,6 @@
 # Default: 1000:1000 (first non-root user on most Linux systems)
 # =============================================================================
 
-# Default values
 PUID=${PUID:-1000}
 PGID=${PGID:-1000}
 
@@ -27,8 +26,8 @@ fi
 # Create group if it doesn't exist
 if ! getent group "$PGID" > /dev/null 2>&1; then
     echo "[entrypoint] Creating group with GID $PGID"
-    groupadd -g "$PGID" dbbackup
-    GROUPNAME="dbbackup"
+    groupadd -g "$PGID" kddbackup
+    GROUPNAME="kddbackup"
 else
     echo "[entrypoint] Group with GID $PGID already exists"
     GROUPNAME=$(getent group "$PGID" | cut -d: -f1)
@@ -37,8 +36,8 @@ fi
 # Create user if it doesn't exist
 if ! getent passwd "$PUID" > /dev/null 2>&1; then
     echo "[entrypoint] Creating user with UID $PUID"
-    useradd -u "$PUID" -g "$PGID" -m -s /bin/bash dbbackup
-    USERNAME="dbbackup"
+    useradd -u "$PUID" -g "$PGID" -m -s /bin/bash kddbackup
+    USERNAME="kddbackup"
 else
     echo "[entrypoint] User with UID $PUID already exists"
     USERNAME=$(getent passwd "$PUID" | cut -d: -f1)
@@ -46,7 +45,10 @@ fi
 
 # Detect Docker socket GID and add user to that group (for docker ps/inspect)
 if [ -S /var/run/docker.sock ]; then
-    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || echo "999")
+    # Try Linux stat first, fallback to BSD stat format
+    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || \
+                      stat -f '%g' /var/run/docker.sock 2>/dev/null || \
+                      echo "999")
     echo "[entrypoint] Docker socket detected with GID $DOCKER_SOCK_GID"
     
     # Create docker group with that GID if it doesn't exist
