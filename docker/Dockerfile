@@ -14,8 +14,8 @@ FROM debian:12-slim
 
 LABEL maintainer="KDD Backup Tool" \
       description="Komodo Database Dumper - Universal Database Backup" \
-      version="2.0.0" \
-      org.opencontainers.image.source="https://github.com/yourusername/kdd"
+      version="1.0.0" \
+      org.opencontainers.image.source="https://github.com/kayaman78/kdd"
 
 # -----------------------------------------------------------------------------
 # Environment Variables
