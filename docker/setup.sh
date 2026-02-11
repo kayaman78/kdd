@@ -16,7 +16,6 @@
 set -e
 
 CONFIG="/config/config.yaml"
-DOCKER_ROOT="${DOCKER_ROOT:-/srv/docker}"
 DEFAULT_NETWORK="bridge"
 INTERACTIVE=false
 
