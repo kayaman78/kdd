@@ -36,6 +36,22 @@ SMTP_FROM=${SMTP_FROM:-}
 SMTP_TO=${SMTP_TO:-}
 SMTP_TLS=${SMTP_TLS:-auto}
 
+# Network filter (optional - backup only DBs on specific network)
+NETWORK_FILTER=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --network-filter)
+            NETWORK_FILTER="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
 # -----------------------------------------------------------------------------
 # LOGGING
 # -----------------------------------------------------------------------------
@@ -192,6 +208,7 @@ init_log
 
 log "KDD - Starting backup"
 log "Retention: $RETENTION_DAYS days"
+[ -n "$NETWORK_FILTER" ] && log "Network filter: $NETWORK_FILTER (backing up only DBs on this network)"
 
 [ ! -f "$CONFIG" ] && log_error "config.yaml not found" && exit 1
 
@@ -219,6 +236,13 @@ if [ "$mysql_count" -gt 0 ]; then
         user=$(yq e ".mysql[$i].user" "$CONFIG")
         pass=$(yq e ".mysql[$i].password" "$CONFIG")
         db=$(yq e ".mysql[$i].dbname" "$CONFIG")
+        network=$(yq e ".mysql[$i].network" "$CONFIG")
+        
+        # Skip if network filter is set and doesn't match
+        if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
+            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            continue
+        fi
         
         target="$BACKUPS_DIR/$name"
         mkdir -p "$target"
@@ -262,6 +286,13 @@ if [ "$pg_count" -gt 0 ]; then
         user=$(yq e ".postgres[$i].user" "$CONFIG")
         pass=$(yq e ".postgres[$i].password" "$CONFIG")
         db=$(yq e ".postgres[$i].dbname" "$CONFIG")
+        network=$(yq e ".postgres[$i].network" "$CONFIG")
+        
+        # Skip if network filter is set and doesn't match
+        if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
+            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            continue
+        fi
         
         target="$BACKUPS_DIR/$name"
         mkdir -p "$target"
@@ -309,6 +340,13 @@ if [ "$mongo_count" -gt 0 ]; then
         pass=$(yq e ".mongo[$i].password" "$CONFIG")
         authdb=$(yq e ".mongo[$i].authdb" "$CONFIG")
         db=$(yq e ".mongo[$i].dbname" "$CONFIG")
+        network=$(yq e ".mongo[$i].network" "$CONFIG")
+        
+        # Skip if network filter is set and doesn't match
+        if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
+            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            continue
+        fi
         
         target="$BACKUPS_DIR/$name"
         mkdir -p "$target"
