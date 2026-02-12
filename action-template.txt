@@ -1,0 +1,136 @@
+// ==================== PARAMETRI CONFIGURABILI ====================
+
+const CONFIG = {
+  SERVER_NAME: "WSL-ServerW11",
+  NETWORK: "kayabridge",
+  CONFIG_PATH: "/srv/docker/kdd/config",
+  DUMP_PATH: "/srv/docker/kdd/dump",
+  RETENTION_DAYS: "7",
+  TIMEZONE: "Europe/Rome",
+  SMTP: {
+    ENABLED: "true",
+    HOST: "192.168.7.5",
+    PORT: "25",
+    USER: "your-email@gmail.com",
+    PASS: "your-app-password",
+    FROM: "backup@tuodominio.com",
+    TO: "admin@tuodominio.com",
+    TLS: "off"
+  },
+  IMAGE: "ghcr.io/kayaman78/kdd:latest"
+};
+
+// ==================== CODICE ACTION ====================
+
+async function runBackup() {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const containerName = `kdd-backup-kayabridge-${timestamp}`;
+  const terminalName = `kdd-backup-${timestamp}`;
+  
+  const dockerCommand = `docker run --rm \
+    --name ${containerName} \
+    --network ${CONFIG.NETWORK} \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro \
+    -v ${CONFIG.CONFIG_PATH}:/config:ro \
+    -v ${CONFIG.DUMP_PATH}:/backups \
+    -e RETENTION_DAYS=${CONFIG.RETENTION_DAYS} \
+    -e TZ=${CONFIG.TIMEZONE} \
+    -e ENABLE_EMAIL=${CONFIG.SMTP.ENABLED} \
+    -e SMTP_HOST=${CONFIG.SMTP.HOST} \
+    -e SMTP_PORT=${CONFIG.SMTP.PORT} \
+    -e SMTP_USER=${CONFIG.SMTP.USER} \
+    -e SMTP_PASS='${CONFIG.SMTP.PASS}' \
+    -e SMTP_FROM=${CONFIG.SMTP.FROM} \
+    -e SMTP_TO=${CONFIG.SMTP.TO} \
+    -e SMTP_TLS=${CONFIG.SMTP.TLS} \
+    ${CONFIG.IMAGE} \
+    /app/backup.sh --network-filter ${CONFIG.NETWORK}`;
+
+  console.log(`🚀 Avvio backup KDD su server: ${CONFIG.SERVER_NAME}`);
+  console.log(`📦 Container: ${containerName}`);
+  
+  let exitCode: number | null = null;
+  
+  try {
+    // Crea terminale
+    await komodo.write("CreateTerminal", {
+      server: CONFIG.SERVER_NAME,
+      name: terminalName,
+      command: "bash",
+      recreate: Types.TerminalRecreateMode.DifferentCommand,
+    });
+    
+    console.log("✅ Terminale creato, avvio backup...");
+    
+    // Esegui comando con log in tempo reale
+    await komodo.execute_terminal(
+      {
+        server: CONFIG.SERVER_NAME,
+        terminal: terminalName,
+        command: dockerCommand,
+      },
+      {
+        onLine: (line: string) => {
+          console.log(`📝 ${line}`);
+        },
+        onFinish: (code: number) => {
+          exitCode = code;
+          console.log(`🏁 Processo terminato con exit code: ${code}`);
+        },
+      }
+    );
+    
+    // Attendi che onFinish venga chiamato
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Valuta risultato
+    const finalCode = Number(exitCode ?? 0);
+    
+    if (finalCode === 0) {
+      console.log("✅ BACKUP COMPLETATO CON SUCCESSO!");
+      console.log(`📁 Dump salvati in: ${CONFIG.DUMP_PATH}`);
+    } else {
+      throw new Error(`Backup failed with exit code ${finalCode}`);
+    }
+    
+  } catch (error) {
+    console.error("❌ Errore:", error);
+    throw error;
+  } finally {
+    // PULIZIA TERMINALE
+    console.log("🧹 Pulizia terminale...");
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    try {
+      // 1. Invia comando exit per chiudere la shell bash
+      console.log("🚪 Uscita dalla shell...");
+      await komodo.execute_terminal(
+        {
+          server: CONFIG.SERVER_NAME,
+          terminal: terminalName,
+          command: "exit",
+        },
+        {
+          onLine: (line: string) => {}, // ignora output
+          onFinish: (code: number) => {},
+        }
+      );
+      
+      // Attendi che exit venga processato
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 2. Elimina il terminale
+      console.log("🗑️  Eliminazione terminale...");
+      await komodo.write("DeleteTerminal", {
+        server: CONFIG.SERVER_NAME,
+        name: terminalName,
+      });
+      console.log("✅ Terminale eliminato");
+      
+    } catch (e: any) {
+      console.log(`⚠️  Cleanup note: ${e?.message || "skipped"}`);
+    }
+  }
+}
+
+await runBackup();
