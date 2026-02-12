@@ -1,22 +1,36 @@
+// Action: KDD Backup Runner
+// Descrizione: Esegue il backup KDD su server specificato con parametri SMTP configurabili
+
 // ==================== PARAMETRI CONFIGURABILI ====================
 
 const CONFIG = {
-  SERVER_NAME: "WSL-ServerW11",
+  // Server target (nome del server in Komodo, NON l'ID)
+  SERVER_NAME: "WSL-ServerW11",  // <-- MODIFICA QUI: metti il nome del tuo server Komodo
+  
+  // Rete Docker
   NETWORK: "kayabridge",
+  
+  // Volumi (modifica i path se necessario)
   CONFIG_PATH: "/srv/docker/kdd/config",
   DUMP_PATH: "/srv/docker/kdd/dump",
+  
+  // Parametri backup
   RETENTION_DAYS: "7",
   TIMEZONE: "Europe/Rome",
+  
+  // Configurazione SMTP (modificabili)
   SMTP: {
-    ENABLED: "true",
+    ENABLED: "false",
     HOST: "192.168.7.5",
     PORT: "25",
     USER: "your-email@gmail.com",
-    PASS: "your-app-password",
+    PASS: "your-app-password",  // <-- Usa secrets di Komodo per questo!
     FROM: "backup@tuodominio.com",
     TO: "admin@tuodominio.com",
-    TLS: "off"
+    TLS: "off"  // on/off
   },
+  
+  // Immagine KDD
   IMAGE: "ghcr.io/kayaman78/kdd:latest"
 };
 
