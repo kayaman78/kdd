@@ -16,6 +16,7 @@
 set -e
 
 CONFIG="/config/config.yaml"
+DOCKER_ROOT="${DOCKER_ROOT:-/srv/docker}"
 DEFAULT_NETWORK="bridge"
 INTERACTIVE=false
 
@@ -88,7 +89,8 @@ ask_confirm() {
     fi
     
     local prompt="$1"
-    read -p "$prompt [y/N] " -r response
+    # Read from /dev/tty to ensure interactive input works in Docker
+    read -p "$prompt [y/N] " -r response < /dev/tty
     [[ "$response" =~ ^[yY]$ ]]
 }
 
