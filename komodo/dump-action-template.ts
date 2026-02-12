@@ -8,23 +8,23 @@ const CONFIG = {
   SERVER_NAME: "nameserver",  // <-- MODIFY HERE: put your Komodo server name
   
   // Docker network
-  NETWORK: "namenetwork",
+  NETWORK: "namenetwork", // <-- MODIFY HERE: put your docker network
   
   // Volumes (modify paths if needed)
-  CONFIG_PATH: "/stackpath/kdd/config",
-  DUMP_PATH: "/stackpath/kdd/dump",
+  CONFIG_PATH: "/stackpath/kdd/config", // <-- MODIFY HERE: put your stack path
+  DUMP_PATH: "/stackpath/kdd/dump",     // <-- MODIFY HERE: put your stack path
   
   // Backup parameters
-  RETENTION_DAYS: "7",
-  TIMEZONE: "Europe/Rome",
+  RETENTION_DAYS: "7",   // <-- MODIFY HERE: put retention
+  TIMEZONE: "Europe/Rome",   // <-- MODIFY HERE: put your timezone
   
   // SMTP configuration (editable)
   SMTP: {
     ENABLED: "false",
     HOST: "smtp",
     PORT: "25",
-    USER: "your-email@gmail.com",
-    PASS: "your-app-password",  // <-- Use Komodo secrets for this!
+    USER: "your-email@gmail.com",   // <-- leave empty fo no auth
+    PASS: "your-app-password",      // <-- Use Komodo secrets for this! or leave empty fo no auth
     FROM: "backup@yourdomain.com",
     TO: "admin@yourdomain.com",
     TLS: "off"  // on/off
