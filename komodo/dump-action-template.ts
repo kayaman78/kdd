@@ -1,156 +1,117 @@
-// Action: KDD Backup Runner
-// Description: Runs KDD backup on specified server with configurable SMTP parameters
-
-// ==================== CONFIGURABLE PARAMETERS ====================
-
-const CONFIG = {
-  // Target server (Komodo server name, NOT the ID)
-  SERVER_NAME: "nameserver",  // <-- MODIFY HERE: put your Komodo server name
-  
-  // Docker network
-  NETWORK: "namenetwork", // <-- MODIFY HERE: put your docker network
-  
-  // Volumes (modify paths if needed)
-  CONFIG_PATH: "/stackpath/kdd/config", // <-- MODIFY HERE: put your stack path
-  DUMP_PATH: "/stackpath/kdd/dump",     // <-- MODIFY HERE: put your stack path
-  
-  // Backup parameters
-  RETENTION_DAYS: "7",   // <-- MODIFY HERE: put retention
-  TIMEZONE: "Europe/Rome",   // <-- MODIFY HERE: put your timezone
-  
-  // SMTP configuration (editable)
-  SMTP: {
-    ENABLED: "false",
-    HOST: "smtp",
-    PORT: "25",
-    USER: "your-email@gmail.com",   // <-- leave empty fo no auth
-    PASS: "your-app-password",      // <-- Use Komodo secrets for this! or leave empty fo no auth
-    FROM: "backup@yourdomain.com",
-    TO: "admin@yourdomain.com",
-    TLS: "off"  // on/off
-  },
-  
-  // KDD Image
-  IMAGE: "ghcr.io/kayaman78/kdd:latest"
-};
-
-// ==================== ACTION CODE ====================
+/**
+ * Action: KDD Backup Runner
+ * Description: Orchestrates automated Docker backups for databases (MySQL, MongoDB, etc.)
+ * using the KDD (Komodo Docker Dump) image. It dynamically pulls parameters from 
+ * the Komodo 'ARGS' injection, executes the backup via a temporary terminal, 
+ * and handles clean cleanup of resources.
+ */
 
 async function runBackup() {
-  // Static name to avoid issues
-  const terminalName = `kdd-backup-temp`;
-  
-  const dockerCommand = `docker run --rm \\
-    --name kdd-backup-runner-$(date +%s) \\
-    --network ${CONFIG.NETWORK} \\
-    -v /var/run/docker.sock:/var/run/docker.sock:ro \\
-    -v ${CONFIG.CONFIG_PATH}:/config:ro \\
-    -v ${CONFIG.DUMP_PATH}:/backups \\
-    -e RETENTION_DAYS=${CONFIG.RETENTION_DAYS} \\
-    -e TZ=${CONFIG.TIMEZONE} \\
-    -e ENABLE_EMAIL=${CONFIG.SMTP.ENABLED} \\
-    -e SMTP_HOST=${CONFIG.SMTP.HOST} \\
-    -e SMTP_PORT=${CONFIG.SMTP.PORT} \\
-    -e SMTP_USER=${CONFIG.SMTP.USER} \\
-    -e SMTP_PASS='${CONFIG.SMTP.PASS}' \\
-    -e SMTP_FROM=${CONFIG.SMTP.FROM} \\
-    -e SMTP_TO=${CONFIG.SMTP.TO} \\
-    -e SMTP_TLS=${CONFIG.SMTP.TLS} \\
-    ${CONFIG.IMAGE} \\
-    /app/backup.sh --network-filter ${CONFIG.NETWORK}`;
+    // @ts-ignore
+    // ARGS is globally injected by Komodo from the 'Argument' field in the UI
+    const config = ARGS;
 
-  console.log(`🚀 Starting KDD backup on server: ${CONFIG.SERVER_NAME}`);
-  
-  let exitCode = null;
-  let executionFinished = false;
-  
-  try {
-    // Create terminal
-    await komodo.write("CreateTerminal", {
-      server: CONFIG.SERVER_NAME,
-      name: terminalName,
-      command: "bash",
-      recreate: Types.TerminalRecreateMode.Always,
-    });
-    
-    console.log("✅ Terminal created, starting backup...");
-    
-    // Execute command with real-time logging
-    await komodo.execute_terminal(
-      {
-        server: CONFIG.SERVER_NAME,
-        terminal: terminalName,
-        command: dockerCommand,
-      },
-      {
-        onLine: (line) => {
-          console.log(`📝 ${line}`);
-        },
-        onFinish: (code) => {
-          exitCode = code;
-          executionFinished = true;
-          console.log(`🏁 Process finished with exit code: ${code}`);
-        },
-      }
-    );
-    
-    // Wait for execution to finish
-    while (!executionFinished) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    if (!config || !config.server_name) {
+        throw new Error("Error: 'ARGS' parameters not found. Check your JSON configuration.");
     }
+
+    console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
+    const terminalName = `kdd-backup-temp`;
     
-    // Evaluate result
-    const finalCode = Number(exitCode ?? 0);
-    
-    if (finalCode === 0) {
-      console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
-      console.log(`📁 Dumps saved to: ${CONFIG.DUMP_PATH}`);
-    } else {
-      throw new Error(`Backup failed with exit code ${finalCode}`);
-    }
-    
-  } catch (error) {
-    console.error("❌ Error:", error);
-    throw error;
-  } finally {
-    // Close terminal immediately
-    console.log("🧹 Closing terminal...");
-    
+    // Constructing the Docker command using injected parameters
+    const dockerCommand = `docker run --rm \\
+        --name kdd-backup-runner-$(date +%s) \\
+        --network ${config.network} \\
+        -v /var/run/docker.sock:/var/run/docker.sock:ro \\
+        -v ${config.config_path}:/config:ro \\
+        -v ${config.dump_path}:/backups \\
+        -e RETENTION_DAYS=${config.retention_days} \\
+        -e TZ=${config.timezone} \\
+        -e ENABLE_EMAIL=${config.smtp.enabled} \\
+        -e SMTP_HOST=${config.smtp.host} \\
+        -e SMTP_PORT=${config.smtp.port} \\
+        -e SMTP_USER=${config.smtp.user} \\
+        -e SMTP_PASS='${config.smtp.pass}' \\
+        -e SMTP_FROM=${config.smtp.from} \\
+        -e SMTP_TO=${config.smtp.to} \\
+        -e SMTP_TLS=${config.smtp.tls} \\
+        ${config.image} \\
+        /app/backup.sh --network-filter ${config.network}`;
+
+    let exitCode: number | null = null;
+    let executionFinished = false;
+
     try {
-      // Try to force close by sending exit command
-      await komodo.execute_terminal(
-        {
-          server: CONFIG.SERVER_NAME,
-          terminal: terminalName,
-          command: "exit 0",
-        },
-        { onLine: () => {}, onFinish: () => {} }
-      );
-      
-      // Wait a moment
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Then delete terminal
-      await komodo.write("DeleteTerminal", {
-        server: CONFIG.SERVER_NAME,
-        name: terminalName,
-      });
-      
-      console.log("✅ Terminal closed and deleted");
-    } catch (e) {
-      console.log(`⚠️  Cleanup error: ${e?.message || "unknown"}`);
-      
-      // If it fails, try direct deletion
-      try {
-        await komodo.write("DeleteTerminal", {
-          server: CONFIG.SERVER_NAME,
-          name: terminalName,
+        // 1. Create a temporary terminal on the target server
+        await komodo.write("CreateTerminal", {
+            server: config.server_name,
+            name: terminalName,
+            command: "bash",
+            recreate: "Always", 
         });
-      } catch {
-        // Ignore final deletion errors
-      }
+
+        console.log("✅ Terminal created successfully.");
+
+        // 2. Execute the backup command and stream logs
+        await komodo.execute_terminal(
+            {
+                server: config.server_name,
+                terminal: terminalName,
+                command: dockerCommand,
+            },
+            {
+                onLine: (line: string) => console.log(`[KDD] ${line}`),
+                onFinish: (code: number) => {
+                    exitCode = code;
+                    executionFinished = true;
+                },
+            }
+        );
+
+        // Wait for the onFinish callback to trigger
+        while (!executionFinished) {
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        // 3. Evaluate the result
+        const finalStatus = Number(exitCode ?? 0);
+        if (finalStatus === 0) {
+            console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
+        } else {
+            throw new Error(`Backup failed with exit code: ${finalStatus}`);
+        }
+
+    } catch (err: any) {
+        console.error(`❌ CRITICAL ERROR: ${err.message}`);
+        throw err;
+    } finally {
+        // 4. Robust Cleanup: ensuring the terminal is closed and removed
+        console.log("🧹 Cleaning up terminal resources...");
+        try {
+            // Send exit command to the bash process
+            await komodo.execute_terminal(
+                {
+                    server: config.server_name,
+                    terminal: terminalName,
+                    command: "exit 0",
+                },
+                { onLine: () => {}, onFinish: () => {} }
+            );
+            
+            // Short delay to allow the process to release handles
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Delete the terminal resource from Komodo
+            await komodo.write("DeleteTerminal", {
+                server: config.server_name,
+                name: config.terminalName || terminalName,
+            });
+            console.log("✅ Terminal resource removed.");
+        } catch (e) {
+            console.log("⚠️ Cleanup note: Terminal was closed forcefully or was already gone.");
+        }
     }
-  }
 }
 
+// Start the execution
 await runBackup();
