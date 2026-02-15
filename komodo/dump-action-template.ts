@@ -7,18 +7,18 @@
  */
 
 async function runBackup() {
+    // We use @ts-ignore because ARGS is injected as a local constant 
+    // by Komodo at runtime, so it's not visible to the linter here.
     // @ts-ignore
-    // ARGS is globally injected by Komodo from the 'Argument' field in the UI
     const config = ARGS;
 
     if (!config || !config.server_name) {
-        throw new Error("Error: 'ARGS' parameters not found. Check your JSON configuration.");
+        throw new Error("Error: 'ARGS' parameters not found. Check your JSON field.");
     }
 
     console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
     const terminalName = `kdd-backup-temp`;
     
-    // Constructing the Docker command using injected parameters
     const dockerCommand = `docker run --rm \\
         --name kdd-backup-runner-$(date +%s) \\
         --network ${config.network} \\
@@ -38,21 +38,21 @@ async function runBackup() {
         ${config.image} \\
         /app/backup.sh --network-filter ${config.network}`;
 
-    let exitCode: number | null = null;
+    let exitCode: string | null = null;
     let executionFinished = false;
 
     try {
-        // 1. Create a temporary terminal on the target server
+        // 1. Create Terminal
         await komodo.write("CreateTerminal", {
             server: config.server_name,
             name: terminalName,
             command: "bash",
-            recreate: "Always", 
+            recreate: Types.TerminalRecreateMode.Always, 
         });
 
-        console.log("✅ Terminal created successfully.");
+        console.log("✅ Terminal created.");
 
-        // 2. Execute the backup command and stream logs
+        // 2. Execute
         await komodo.execute_terminal(
             {
                 server: config.server_name,
@@ -61,34 +61,29 @@ async function runBackup() {
             },
             {
                 onLine: (line: string) => console.log(`[KDD] ${line}`),
-                onFinish: (code: number) => {
+                onFinish: (code: string) => {
                     exitCode = code;
                     executionFinished = true;
                 },
             }
         );
 
-        // Wait for the onFinish callback to trigger
         while (!executionFinished) {
             await new Promise(r => setTimeout(r, 500));
         }
 
-        // 3. Evaluate the result
-        const finalStatus = Number(exitCode ?? 0);
-        if (finalStatus === 0) {
+        if (exitCode === "0") {
             console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
         } else {
-            throw new Error(`Backup failed with exit code: ${finalStatus}`);
+            throw new Error(`Backup failed with exit code: ${exitCode}`);
         }
 
     } catch (err: any) {
         console.error(`❌ CRITICAL ERROR: ${err.message}`);
         throw err;
     } finally {
-        // 4. Robust Cleanup: ensuring the terminal is closed and removed
         console.log("🧹 Cleaning up terminal resources...");
         try {
-            // Send exit command to the bash process
             await komodo.execute_terminal(
                 {
                     server: config.server_name,
@@ -98,20 +93,20 @@ async function runBackup() {
                 { onLine: () => {}, onFinish: () => {} }
             );
             
-            // Short delay to allow the process to release handles
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            // Delete the terminal resource from Komodo
+            // Using 'as any' to satisfy the linter's strict type check on DeleteTerminal
             await komodo.write("DeleteTerminal", {
                 server: config.server_name,
-                name: config.terminalName || terminalName,
-            });
+                name: terminalName,
+                terminal: terminalName
+            } as any);
+            
             console.log("✅ Terminal resource removed.");
         } catch (e) {
-            console.log("⚠️ Cleanup note: Terminal was closed forcefully or was already gone.");
+            console.log("⚠️ Cleanup: Terminal already closed.");
         }
     }
 }
 
-// Start the execution
 await runBackup();
