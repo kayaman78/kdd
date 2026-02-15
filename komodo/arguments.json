@@ -1,0 +1,19 @@
+{
+  "server_name": "nameserver",
+  "network": "namenetwork",
+  "config_path": "/stackpath/kdd/config",
+  "dump_path": "/stackpath/kdd/dump",
+  "retention_days": "7",
+  "timezone": "Europe/Rome",
+  "image": "ghcr.io/kayaman78/kdd:latest",
+  "smtp": {
+    "enabled": "false",
+    "host": "smtp",
+    "port": "25",
+    "user": "your-email@gmail.com",
+    "pass": "your-app-password",
+    "from": "backup@yourdomain.com",
+    "to": "admin@yourdomain.com",
+    "tls": "off"
+  }
+}
