@@ -1,19 +1,21 @@
 {
-  "server_name": "nameserver",
-  "network": "namenetwork",
-  "config_path": "/stackpath/kdd/config",
-  "dump_path": "/stackpath/kdd/dump",
-  "retention_days": "7",
+  "server_name": "prod-server-01",
+  "network": "backend-prod",
+  "config_path": "/data/stacks/production/kdd/config",
+  "dump_path": "/data/stacks/production/kdd/dump",
+  "retention_days": "14",
   "timezone": "Europe/Rome",
+  "server_display_name": "Server Produzione Milano",
+  "job_name": "Backup Database E-commerce",
   "image": "ghcr.io/kayaman78/kdd:latest",
   "smtp": {
-    "enabled": "false",
-    "host": "smtp",
-    "port": "25",
-    "user": "your-email@gmail.com",
+    "enabled": "true",
+    "host": "smtp.gmail.com",
+    "port": "587",
+    "user": "backup@mycompany.com",
     "pass": "your-app-password",
-    "from": "backup@yourdomain.com",
-    "to": "admin@yourdomain.com",
-    "tls": "off"
+    "from": "backup@mycompany.com",
+    "to": "admin@mycompany.com,ops@mycompany.com",
+    "tls": "auto"
   }
 }
