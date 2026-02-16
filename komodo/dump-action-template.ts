@@ -5,21 +5,19 @@
  * the Komodo 'ARGS' injection, executes the backup via a temporary terminal, 
  * and handles clean cleanup of resources.
  */
-
 async function runBackup() {
     // We use @ts-ignore because ARGS is injected as a local constant 
     // by Komodo at runtime, so it's not visible to the linter here.
     // @ts-ignore
     const config = ARGS;
-
     if (!config || !config.server_name) {
         throw new Error("Error: 'ARGS' parameters not found. Check your JSON field.");
     }
-
     console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
     const terminalName = `kdd-backup-temp`;
     
     const dockerCommand = `docker run --rm \\
+        --pull always \\
         --name kdd-backup-runner-$(date +%s) \\
         --network ${config.network} \\
         -v /var/run/docker.sock:/var/run/docker.sock:ro \\
@@ -35,12 +33,12 @@ async function runBackup() {
         -e SMTP_FROM=${config.smtp.from} \\
         -e SMTP_TO=${config.smtp.to} \\
         -e SMTP_TLS=${config.smtp.tls} \\
+        -e SERVER_NAME='${config.server_display_name}' \\
+        -e JOB_NAME='${config.job_name}' \\
         ${config.image} \\
         /app/backup.sh --network-filter ${config.network}`;
-
     let exitCode: string | null = null;
     let executionFinished = false;
-
     try {
         // 1. Create Terminal
         await komodo.write("CreateTerminal", {
@@ -49,9 +47,7 @@ async function runBackup() {
             command: "bash",
             recreate: Types.TerminalRecreateMode.Always, 
         });
-
         console.log("✅ Terminal created.");
-
         // 2. Execute
         await komodo.execute_terminal(
             {
@@ -67,17 +63,14 @@ async function runBackup() {
                 },
             }
         );
-
         while (!executionFinished) {
             await new Promise(r => setTimeout(r, 500));
         }
-
         if (exitCode === "0") {
             console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
         } else {
             throw new Error(`Backup failed with exit code: ${exitCode}`);
         }
-
     } catch (err: any) {
         console.error(`❌ CRITICAL ERROR: ${err.message}`);
         throw err;
@@ -94,7 +87,6 @@ async function runBackup() {
             );
             
             await new Promise(resolve => setTimeout(resolve, 500));
-
             // Using 'as any' to satisfy the linter's strict type check on DeleteTerminal
             await komodo.write("DeleteTerminal", {
                 server: config.server_name,
@@ -108,5 +100,4 @@ async function runBackup() {
         }
     }
 }
-
 await runBackup();
