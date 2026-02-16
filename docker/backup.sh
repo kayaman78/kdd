@@ -15,6 +15,8 @@
 #   SMTP_FROM      - From email address
 #   SMTP_TO        - To email addresses (comma-separated)
 #   SMTP_TLS       - TLS mode: auto|on|off (default: auto)
+#   SERVER_NAME    - Server name for email subject (default: KDD)
+#   JOB_NAME       - Job name for email header (default: Backup Report)
 # =============================================================================
 
 set -u
@@ -35,6 +37,8 @@ SMTP_PASS=${SMTP_PASS:-}
 SMTP_FROM=${SMTP_FROM:-}
 SMTP_TO=${SMTP_TO:-}
 SMTP_TLS=${SMTP_TLS:-auto}
+SERVER_NAME=${SERVER_NAME:-KDD}
+JOB_NAME=${JOB_NAME:-Backup Report}
 
 # Network filter (optional - backup only DBs on specific network)
 NETWORK_FILTER=""
@@ -130,7 +134,7 @@ body{font-family:Arial,sans-serif;max-width:800px;margin:20px auto;padding:20px}
 </style>
 </head>
 <body>
-<div class="header"><h1>KDD Backup Report</h1></div>
+<div class="header"><h1>${JOB_NAME}</h1></div>
 <div class="status"><h2>${status_text}</h2></div>
 <div class="summary">
 <h3>Summary</h3>
@@ -397,11 +401,11 @@ if [ "$ENABLE_EMAIL" = "true" ]; then
     html_report+=$(close_html_report)
     
     if [ $failed_backups -eq 0 ]; then
-        subject="[SUCCESS] KDD Backup - $TIMESTAMP"
+        subject="[SUCCESS] ${SERVER_NAME} Backup - $TIMESTAMP"
     elif [ $total_backups -eq 0 ]; then
-        subject="[FAILED] KDD Backup - $TIMESTAMP"
+        subject="[FAILED] ${SERVER_NAME} Backup - $TIMESTAMP"
     else
-        subject="[PARTIAL] KDD Backup - $TIMESTAMP"
+        subject="[PARTIAL] ${SERVER_NAME} Backup - $TIMESTAMP"
     fi
     
     send_email "$subject" "$html_report"
