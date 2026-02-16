@@ -2,15 +2,36 @@
 
 Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
+
 ## Features
 
-- **Multi-database support**: MySQL/MariaDB (5.5-12.x), PostgreSQL (12-17), MongoDB (4.2-8.0)
-- **Network-aware**: Separate backups per Docker network
-- **Email reports**: HTML email notifications with backup status
-- **Auto-discovery**: Scans running containers and generates configuration
-- **Komodo-native**: Built specifically for Komodo Actions and Procedures
-- **Compression**: All backups are gzip compressed
-- **Retention**: Configurable automatic cleanup of old backups
+- **Automatic Discovery**: Scans running Docker containers and detects databases automatically
+- **Multi-Database Support**: MySQL/MariaDB (all versions), PostgreSQL 12-17, MongoDB 4.x-8.x, Redis
+- **Safe Hot Backups**: Uses transaction-safe methods for consistent backups without downtime
+- **Automatic Rotation**: Configurable retention policy (default: 7 days)
+- **Email Notifications**: Optional HTML email reports with color-coded status
+- **Detailed Logging**: Text logs with automatic rotation
+- **PUID/PGID Support**: LinuxServer.io style user mapping for correct file permissions
+- **Network Aware**: Automatically detects and uses correct Docker networks
+- **Lightweight**: Debian-based image with only required database clients
+
+## Supported Databases
+
+| Database | Versions | Backup Method | Hot Backup |
+|----------|----------|---------------|------------|
+| MySQL | All | mysqldump | Yes (InnoDB) |
+| MariaDB | All | mysqldump | Yes |
+| PostgreSQL | 12-17 | pg_dump | Yes |
+| MongoDB | 4.x-8.x | mongodump | Yes |
+
+## Prerequisites
+
+- Docker installed on host machine
+- Running Docker containers with databases
+- Access to `/var/run/docker.sock`
+- Basic knowledge of Docker commands
 
 ## Quick Start
 
