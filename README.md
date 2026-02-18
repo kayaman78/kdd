@@ -32,16 +32,19 @@ Universal database backup solution for Docker environments, designed to work sea
 - Running Docker containers with databases
 - Access to `/var/run/docker.sock`
 - Basic knowledge of Docker commands
+- Komodo
 
 ## Quick Start
 
 ### 1. Setup Configuration
 
-Run the setup script on your server to auto-discover databases:
+Run the setup script on your server to auto-discover databases
+Use ssh or komodo shell on target server
+Adjust the path of the docker stacks
 
 ```bash
-mkdir -p /srv/docker/kdd/{config,dump}
-cd /srv/docker/kdd
+mkdir -p /dockerpath/kdd/{config,dump}
+cd /dockerpath/kdd
 
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
@@ -49,7 +52,7 @@ docker run --rm -it \
   ghcr.io/kayaman78/kdd:latest /app/setup.sh --interactive
 ```
 
-See [SETUP.md](./SETUP.md) for detailed setup instructions.
+See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
 
 ### 2. Create Komodo Action
 
