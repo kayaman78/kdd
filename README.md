@@ -184,7 +184,7 @@ Add this JSON to your Action's configuration field or use [arguments template](k
 
 ### 4. Schedule Backups
 
-Configure Action Schedule (e.g., daily at 2 AM).
+Configure Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups
 
 ## Architecture
 
