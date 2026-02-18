@@ -56,7 +56,7 @@ See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
 
 ### 2. Create Komodo Action
 
-Create a new Action in Komodo with this code:
+Create a new Action in Komodo with this code or better with [action template](komodo/dump-action-template.ts):
 
 ```typescript
 /**
@@ -156,7 +156,7 @@ await runBackup();
 
 ### 3. Configure Action Parameters
 
-Add this JSON to your Action's configuration field:
+Add this JSON to your Action's configuration field or use [arguments template](komodo/arguments-template.json):
 
 ```json
 {
@@ -184,7 +184,7 @@ Add this JSON to your Action's configuration field:
 
 ### 4. Schedule Backups
 
-Create a Komodo Procedure to run the Action on schedule (e.g., daily at 2 AM).
+Configure Action Schedule (e.g., daily at 2 AM).
 
 ## Architecture
 
@@ -219,17 +219,7 @@ Create a Komodo Procedure to run the Action on schedule (e.g., daily at 2 AM).
 | `smtp.to` | To email (comma-separated) | - |
 | `smtp.tls` | TLS mode: auto/on/off | `auto` |
 
-## Project Structure
 
-```
-kdd/
-├── Dockerfile          # Multi-stage build with all DB clients
-├── entrypoint.sh       # PUID/PGID handler for permissions
-├── setup.sh            # Auto-discovery and config generator
-├── backup.sh           # Backup execution engine
-├── SETUP.md            # Detailed setup guide
-└── README.md           # This file
-```
 
 ## How It Works
 
