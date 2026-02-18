@@ -188,7 +188,7 @@ nano /srv/docker/kdd/config/config.yaml
 
 Now create your **Backup Action** to schedule automated backups.
 
-See: [ACTION-TEMPLATE.md](./ACTION-TEMPLATE.md) (coming soon)
+Continue on: [README.md](README.md)
 
 ---
 
