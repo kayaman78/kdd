@@ -1,3 +1,5 @@
+**Project Status**: Active development | **Latest Version**: 1.0.0 | **Maintained**: Yes
+
 # KDD - Komodo Database Dumper
 
 Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
