@@ -265,5 +265,3 @@ MIT License - feel free to use, modify, and distribute.
 For issues or questions, open an issue on GitHub.
 
 ---
-
-**Project Status**: Active development | **Latest Version**: 1.0.0 | **Maintained**: Yes
