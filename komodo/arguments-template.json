@@ -1,12 +1,17 @@
 {
   "server_name": "prod-server-01",
-  "network": "backend-prod",
+  "runner_network": "bridge-01",
+  "backup_networks": [
+    "bridge-01",
+    "bridge-02",
+    "bridge-03"
+  ],
   "config_path": "/data/stacks/production/kdd/config",
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
   "timezone": "Europe/Rome",
-  "server_display_name": "Server Produzione Milano",
-  "job_name": "Backup Database E-commerce",
+  "server_display_name": "Server principale",
+  "job_name": "Backup stack 01",
   "image": "ghcr.io/kayaman78/kdd:latest",
   "smtp": {
     "enabled": "true",
