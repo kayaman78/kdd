@@ -3,7 +3,7 @@
 # KDD - Database Discovery and Configuration Generator
 # =============================================================================
 # Scans running Docker containers and generates config.yaml for backups
-# Supports: MySQL/MariaDB, PostgreSQL, MongoDB
+# Supports: MySQL/MariaDB, PostgreSQL/PostGIS, MongoDB
 #
 # Credential resolution order (per container):
 #   1. Environment variables (direct)
@@ -74,8 +74,9 @@ get_container_env() {
     local val=""
 
     # --- 1. Direct environment variable ---
+    # split on first = only, then rejoin in case password contains = chars
     val=$(docker inspect "$container" 2>/dev/null | \
-        jq -r ".[0].Config.Env[] | select(startswith(\"${var}=\")) | split(\"=\")[1:]| join(\"=\")" \
+        jq -r ".[0].Config.Env[] | select(startswith(\"${var}=\")) | split(\"=\")[1:] | join(\"=\")" \
         2>/dev/null | head -1 || true)
 
     if [ -n "$val" ]; then
@@ -200,7 +201,7 @@ while IFS= read -r container; do
     # -------------------------------------------------------------------------
     # MYSQL / MARIADB
     # -------------------------------------------------------------------------
-    if echo "$image" | grep -qiE 'mysql|mariadb'; then
+    if echo "$image" | grep -qiE 'mysql|mariadb|percona'; then
         log "Found MySQL/MariaDB: $container ($image)"
 
         root_pass=$(get_container_env "$container" "MYSQL_ROOT_PASSWORD")
@@ -246,10 +247,12 @@ while IFS= read -r container; do
     fi
 
     # -------------------------------------------------------------------------
-    # POSTGRESQL
+    # POSTGRESQL / POSTGIS
+    # PostGIS is a PostgreSQL extension - same credentials, same port, same
+    # pg_dump. The only difference is the image name (postgis/postgis).
     # -------------------------------------------------------------------------
-    if echo "$image" | grep -qiE 'postgres'; then
-        log "Found PostgreSQL: $container ($image)"
+    if echo "$image" | grep -qiE 'postgres|postgis|timescale'; then
+        log "Found PostgreSQL/PostGIS: $container ($image)"
 
         db_name=$(get_container_env "$container" "POSTGRES_DB")
         db_user=$(get_container_env "$container" "POSTGRES_USER")
@@ -282,7 +285,7 @@ while IFS= read -r container; do
     # -------------------------------------------------------------------------
     # MONGODB
     # -------------------------------------------------------------------------
-    if echo "$image" | grep -qiE 'mongo'; then
+    if echo "$image" | grep -qiE 'mongo|bitnami/mongodb'; then
         log "Found MongoDB: $container ($image)"
 
         db_user=$(get_container_env "$container" "MONGO_INITDB_ROOT_USERNAME")
@@ -329,10 +332,10 @@ log "=========================================="
 log "Discovery completed"
 log "=========================================="
 log "Databases in config:"
-log "  MySQL/MariaDB: $mysql_count"
-log "  PostgreSQL:    $postgres_count"
-log "  MongoDB:       $mongo_count"
-log "  Total:         $total"
+log "  MySQL/MariaDB:      $mysql_count"
+log "  PostgreSQL/PostGIS: $postgres_count"
+log "  MongoDB:            $mongo_count"
+log "  Total:              $total"
 log ""
 log "Config saved to: $CONFIG"
 log ""
