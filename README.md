@@ -1,4 +1,4 @@
-**Project Status**: Active development | **Latest Version**: 1.0.0 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.0.5 | **Maintained**: Yes
 
 # KDD - Komodo Database Dumper
 
@@ -58,7 +58,7 @@ See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
 
 ### 2. Create Komodo Action
 
-Create a new Action in Komodo with this code or better with [action template](komodo/dump-action-template.ts):
+Create a new Action in Komodo with this code or better with always updated [action template](komodo/dump-action-template.ts):
 
 ```typescript
 /**
@@ -253,7 +253,7 @@ await runBackup();
 
 ### 3. Configure Action Parameters
 
-Add this JSON to your Action's configuration field or use [arguments template](komodo/arguments-template.json):
+Add this JSON to your Action's configuration field or use always updated [arguments template](komodo/arguments-template.json):
 
 ```json
 {
