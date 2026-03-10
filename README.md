@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.0.5 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.0.6 | **Maintained**: Yes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -18,8 +18,9 @@ Universal database backup solution for Docker environments, designed to work sea
 - **Multi-Database Support**: MySQL/MariaDB (all versions), PostgreSQL 12-17, MongoDB 4.x-8.x, Redis
 - **Safe Hot Backups**: Uses transaction-safe methods for consistent backups without downtime
 - **Automatic Rotation**: Configurable retention policy (default: 7 days)
-- **Email Notifications**: Optional HTML email reports with color-coded status
-- **Detailed Logging**: Text logs with automatic rotation
+- **Backup Verification**: Every backup is verified immediately after creation (gzip integrity, dump completion marker, size trend)
+- **Email Notifications**: Optional HTML email reports with color-coded status per database, separate Backup and Verify columns
+- **Detailed Logging**: Daily log files with automatic retention-based rotation
 - **PUID/PGID Support**: LinuxServer.io style user mapping for correct file permissions
 - **Network Aware**: Automatically detects and uses correct Docker networks
 - **Lightweight**: Debian-based image with only required database clients
@@ -366,6 +367,72 @@ To build locally:
 ```bash
 docker build -t kdd:latest .
 ```
+
+---
+
+## How Verification Works
+
+After each backup is created, KDD runs three checks in sequence. A backup must pass all three to be marked ✅ OK.
+
+**1. gzip integrity**
+Runs `gzip -t` on the `.gz` file. Catches truncated or corrupt archives caused by write errors, disk issues, or interrupted dumps.
+
+**2. Dump completion marker**
+Reads the last 5 lines of the compressed dump via `zcat | tail -5` — no full decompression needed. Checks for the marker that the dump tool always writes as the final line when it completes successfully:
+
+- MySQL/MariaDB → `Dump completed`
+- PostgreSQL → `PostgreSQL database dump complete`
+- MongoDB → marker not applicable; mongodump writes atomically, so gzip integrity + non-empty file is sufficient
+
+If the marker is missing, the dump was interrupted mid-write and the backup is incomplete.
+
+**3. Size trend**
+Compares the size of the new backup against the most recent previous backup for the same database. If the new file is smaller by more than `SIZE_DROP_WARN`% (default: 20%), the verify is marked ⚠️ WARN with the old and new sizes shown. This catches silent data loss — for example a service that wiped its tables or a misconfiguration that truncated data before the backup ran.
+
+### Verify vs Backup status in the email
+
+The email report has two separate columns per database row:
+
+| Backup | Verify | Meaning |
+|--------|--------|---------|
+| ✅ success | ✅ OK | Backup written and verified clean |
+| ✅ success | ⚠️ WARN | Backup valid but size dropped unexpectedly — investigate |
+| ✅ success | ❌ FAIL | Backup written but corrupt or incomplete — do not rely on it |
+| ❌ failed | — skipped | Backup failed, verify not attempted |
+
+A WARN does not block the process — the backup is kept and the service continues. A FAIL is reflected in the email subject line.
+
+---
+
+## Log Structure
+
+Logs are stored in a dedicated subdirectory with one file per day, rotated automatically using the same `RETENTION_DAYS` policy as backups.
+
+```
+/backups/
+├── <db-name>/
+│   └── dump-YYYY-MM-DD_HH-MM.sql.gz
+└── log/
+    ├── backup_20250115.log
+    ├── backup_20250116.log
+    └── ...
+```
+
+---
+
+## Changelog
+
+### v1.0.6
+- Added backup verification (gzip integrity, dump completion marker, size trend)
+- Added `SIZE_DROP_WARN` env var (default: 20%)
+- Email report now has separate Backup and Verify columns
+- Email subject now reflects verify outcome (✅ SUCCESS / ⚠️ WARN / ⚠️ PARTIAL / ❌ FAILED)
+- Log files are now daily (`backup_YYYYMMDD.log`) stored in `/backups/log/`
+- Log retention now follows `RETENTION_DAYS` — old log files are deleted automatically
+
+### v1.0.5
+- Added `backup_networks` parameter to connect container to multiple Docker networks
+- Improved network deduplication logic in Komodo Action
 
 ---
 
