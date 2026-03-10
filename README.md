@@ -28,6 +28,27 @@ Universal database backup solution for Docker environments, designed to work sea
 | PostgreSQL | 12-17 | pg_dump | Yes |
 | MongoDB | 4.x-8.x | mongodump | Yes |
 
+## SQLite Support
+
+KDD handles network-based databases via Docker. SQLite is file-based and requires a different approach — which is exactly what the companion projects in this ecosystem are built for.
+
+### 🗄️ [DABS — Docker Automated Backup for SQLite](https://github.com/kayaman78/dabs)
+
+DABS is a standalone bash script that auto-discovers SQLite databases mounted by running containers, stops each service gracefully, compresses the files, and restarts — with WAL support, retention policy, and the same HTML email reporting you get from KDD.
+
+### ⚙️ [KCR — Komodo Command Runner](https://github.com/kayaman78/kcr)
+
+KCR is a Komodo Action template that lets you run arbitrary shell commands on your servers directly from Komodo — including DABS. No extra containers, no mounts. Just drop the Action in Komodo, point it at your script, and you're done.
+
+### Running everything together
+
+The recommended setup is a **Komodo Procedure** that chains KDD and DABS sequentially:
+
+1. KDD Action → backs up MySQL, PostgreSQL, MongoDB
+2. KCR Action running DABS → backs up all SQLite databases on the same host
+3. One schedule, one place to monitor, separate email reports per job
+
+This gives you complete database coverage across your entire Docker stack with zero overlap and minimal configuration.
 ## Prerequisites
 
 - Docker installed on host machine
