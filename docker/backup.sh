@@ -25,7 +25,8 @@ set -o pipefail
 
 CONFIG="/config/config.yaml"
 BACKUPS_DIR="/backups"
-LOG_FILE="/backups/backup.log"
+LOG_DIR="/backups/log"
+LOG_FILE="$LOG_DIR/backup_$(date +%Y%m%d).log"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
 
 RETENTION_DAYS=${RETENTION_DAYS:-7}
@@ -55,10 +56,7 @@ done
 # -----------------------------------------------------------------------------
 
 init_log() {
-    mkdir -p "$(dirname "$LOG_FILE")"
-    if [ -f "$LOG_FILE" ] && [ $(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0) -gt 10485760 ]; then
-        mv "$LOG_FILE" "${LOG_FILE}.old"
-    fi
+    mkdir -p "$LOG_DIR"
     echo "========================================" >> "$LOG_FILE"
     echo "KDD Backup: $(date +'%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
     echo "========================================" >> "$LOG_FILE"
@@ -303,7 +301,7 @@ close_html_report() {
 <div class="footer">
 <p>Verify ✅ ${verify_ok} &nbsp;⚠️ ${verify_warn} &nbsp;❌ ${verify_err}</p>
 <p>Verify checks: gzip integrity + dump completion marker + size trend (warn if drop &gt; ${SIZE_DROP_WARN}%)</p>
-<p>Location: ${BACKUPS_DIR} | Disk used: ${disk}</p>
+<p>Log: ${LOG_FILE} | Location: ${BACKUPS_DIR} | Disk used: ${disk}</p>
 <p>$(date +'%Y-%m-%d %H:%M:%S %Z')</p>
 </div>
 </body></html>
@@ -556,6 +554,21 @@ if [ "$mongo_count" -gt 0 ]; then
         fi
     done
 fi
+
+# -----------------------------------------------------------------------------
+# LOG RETENTION — same policy as backups
+# -----------------------------------------------------------------------------
+
+log "Removing logs older than $RETENTION_DAYS days..."
+DELETED_LOGS=0
+while IFS= read -r -d '' old_log; do
+    rm -f "$old_log"
+    ((DELETED_LOGS++))
+done < <(
+    find "$LOG_DIR" -type f -name "backup_*.log" \
+        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null
+)
+log "Removed $DELETED_LOGS log(s)."
 
 # -----------------------------------------------------------------------------
 # SUMMARY
