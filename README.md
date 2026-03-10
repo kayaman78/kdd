@@ -1,11 +1,16 @@
+# KDD — Komodo Database Dumper
+
 **Project Status**: Active development | **Latest Version**: 1.0.5 | **Maintained**: Yes
-
-# KDD - Komodo Database Dumper
-
-Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
+[![Komodo](https://img.shields.io/badge/komodo-action-blue.svg)](https://github.com/mbecker20/komodo)
+
+Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
+
+> Part of the **KDD ecosystem** — see also [DABS](https://github.com/kayaman78/dabs) for SQLite backups and [KCR](https://github.com/kayaman78/kcr) to run shell-based backup tools from a Komodo Action.
+
+---
 
 ## Features
 
@@ -19,6 +24,8 @@ Universal database backup solution for Docker environments, designed to work sea
 - **Network Aware**: Automatically detects and uses correct Docker networks
 - **Lightweight**: Debian-based image with only required database clients
 
+---
+
 ## Supported Databases
 
 | Database | Versions | Backup Method | Hot Backup |
@@ -27,6 +34,8 @@ Universal database backup solution for Docker environments, designed to work sea
 | MariaDB | All | mysqldump | Yes |
 | PostgreSQL | 12-17 | pg_dump | Yes |
 | MongoDB | 4.x-8.x | mongodump | Yes |
+
+---
 
 ## SQLite Support
 
@@ -49,6 +58,9 @@ The recommended setup is a **Komodo Procedure** that chains KDD and DABS sequent
 3. One schedule, one place to monitor, separate email reports per job
 
 This gives you complete database coverage across your entire Docker stack with zero overlap and minimal configuration.
+
+---
+
 ## Prerequisites
 
 - Docker installed on host machine
@@ -61,9 +73,9 @@ This gives you complete database coverage across your entire Docker stack with z
 
 ### 1. Setup Configuration
 
-Run the setup script on your server to auto-discover databases
-Use ssh or komodo shell on target server
-Adjust the path of the docker stacks
+Run the setup script on your server to auto-discover databases.
+Use SSH or Komodo shell on the target server.
+Adjust the path of the Docker stacks.
 
 ```bash
 mkdir -p /dockerpath/kdd/{config,dump}
@@ -119,11 +131,6 @@ async function runBackup() {
 
     console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
 
-    // -------------------------------------------------------------------------
-    // Resolve all networks to connect to.
-    // runner_network is always first (used in docker run).
-    // backup_networks may include it too — we deduplicate and skip it on connect.
-    // -------------------------------------------------------------------------
     const allNetworks: string[] = config.backup_networks
         ? (Array.isArray(config.backup_networks)
             ? config.backup_networks
@@ -131,44 +138,26 @@ async function runBackup() {
           ).filter((n: string) => n.length > 0)
         : [];
 
-    // Extra networks = all except runner_network (already attached at docker run)
     const extraNetworks = allNetworks.filter((n: string) => n !== config.runner_network);
 
     console.log(`🌐 Runner network : ${config.runner_network}`);
     console.log(`🌐 Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
 
-    // -------------------------------------------------------------------------
-    // Unique container name for this run
-    // -------------------------------------------------------------------------
     const containerName = `kdd-backup-runner`;
     const terminalName  = `kdd-backup-temp`;
 
-    // -------------------------------------------------------------------------
-    // Build network connect commands (step 3)
-    // -------------------------------------------------------------------------
     const networkConnectCmds = extraNetworks.length > 0
         ? extraNetworks.map((n: string) => `docker network connect ${n} ${containerName}`).join(" && \\\n")
         : "echo '  No extra networks to connect'";
 
-    // -------------------------------------------------------------------------
-    // Full shell sequence:
-    //   1. Pull latest image
-    //   2. Start container detached (sleeps, waits for exec)
-    //   3. Connect to extra networks
-    //   4. Execute backup
-    //   5. Cleanup container (always, via trap)
-    // -------------------------------------------------------------------------
     const dockerCommand = `
 set -e
 
-# Ensure cleanup on exit regardless of outcome
 trap 'echo "[KDD] Removing container..."; docker rm -f ${containerName} 2>/dev/null || true' EXIT
 
-# 1. Pull latest image
 echo "[KDD] Pulling ${config.image}..."
 docker pull ${config.image}
 
-# 2. Start container detached on primary network
 echo "[KDD] Starting container on network: ${config.runner_network}"
 docker run -d \\
   --name ${containerName} \\
@@ -190,11 +179,9 @@ docker run -d \\
   -e JOB_NAME='${config.job_name}' \\
   --entrypoint sleep ${config.image} infinity
 
-# 3. Connect to extra networks
 echo "[KDD] Connecting extra networks..."
 ${networkConnectCmds}
 
-# 4. Execute backup
 echo "[KDD] Running backup..."
 docker exec ${containerName} /app/backup.sh
 `.trim();
@@ -203,7 +190,6 @@ docker exec ${containerName} /app/backup.sh
     let executionFinished = false;
 
     try {
-        // Create terminal
         await komodo.write("CreateTerminal", {
             server: config.server_name,
             name: terminalName,
@@ -212,7 +198,6 @@ docker exec ${containerName} /app/backup.sh
         });
         console.log("✅ Terminal created.");
 
-        // Execute
         await komodo.execute_terminal(
             {
                 server: config.server_name,
@@ -307,19 +292,25 @@ Add this JSON to your Action's configuration field or use always updated [argume
 
 ### 4. Schedule Backups
 
-Configure Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups
+Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups.
+
+---
 
 ## Architecture
 
 **Network-based separation**: KDD uses Docker networks to organize backups. Create one Action per Docker network you want to backup. This allows:
+
 - Independent backup schedules per network (prod daily, test weekly)
 - Separate email notifications per environment
 - Network isolation for security
 
 **Example setup**:
+
 - Action 1: `network: "production"` → backs up all prod databases
 - Action 2: `network: "staging"` → backs up all staging databases
 - Action 3: `network: "services"` → backs up auxiliary services
+
+---
 
 ## Configuration Parameters
 
@@ -342,7 +333,7 @@ Configure Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for mu
 | `smtp.to` | To email (comma-separated) | - |
 | `smtp.tls` | TLS mode: auto/on/off | `auto` |
 
-
+---
 
 ## How It Works
 
@@ -352,20 +343,19 @@ Configure Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for mu
 4. **Rotation**: Removes backups older than retention period
 5. **Notification**: Sends HTML email report with results
 
+---
+
 ## Email Reports
 
 KDD sends professional HTML email reports with:
+
 - Color-coded status (green/yellow/red)
 - Per-database backup status and size
 - Customizable server name in subject
 - Customizable job name in header
 - Total disk usage footer
 
-## Requirements
-
-- Docker installed on target server
-- Komodo instance with server connection
-- Running database containers with standard environment variables
+---
 
 ## Building
 
@@ -377,6 +367,17 @@ To build locally:
 docker build -t kdd:latest .
 ```
 
+---
+
+## Related Projects
+
+| Project | Description |
+|---------|-------------|
+| [DABS](https://github.com/kayaman78/dabs) | Docker automated backup for SQLite |
+| [KCR](https://github.com/kayaman78/kcr) | Komodo Action to run shell commands on remote servers |
+
+---
+
 ## License
 
 MIT License - feel free to use, modify, and distribute.
@@ -384,5 +385,3 @@ MIT License - feel free to use, modify, and distribute.
 ## Support
 
 For issues or questions, open an issue on GitHub.
-
----
