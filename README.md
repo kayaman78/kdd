@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.0.6 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.0.7 | **Maintained**: Yes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -20,6 +20,7 @@ Universal database backup solution for Docker environments, designed to work sea
 - **Automatic Rotation**: Configurable retention policy (default: 7 days)
 - **Backup Verification**: Every backup is verified immediately after creation (gzip integrity, dump completion marker, size trend)
 - **Email Notifications**: Optional HTML email reports with color-coded status per database, separate Backup and Verify columns
+- **Push Notifications**: Optional Telegram and ntfy alerts — fully independent from each other and from email
 - **Detailed Logging**: Daily log files with automatic retention-based rotation
 - **PUID/PGID Support**: LinuxServer.io style user mapping for correct file permissions
 - **Network Aware**: Automatically detects and uses correct Docker networks
@@ -92,171 +93,9 @@ See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
 
 ### 2. Create Komodo Action
 
-Create a new Action in Komodo with this code or better with always updated [action template](komodo/dump-action-template.ts):
+In Komodo go to **Actions → New Action**, paste the content of [dump-action-template.ts](komodo/dump-action-template.ts) into the Script field, and save.
 
-```typescript
-/**
- * Action: KDD Backup Runner
- * Description: Orchestrates automated Docker backups for databases (MySQL, PostgreSQL/PostGIS, MongoDB)
- * using the KDD (Komodo Docker Dump) image. Connects the backup container to all required
- * networks so it can reach databases across different Docker stacks on the same server.
- *
- * ARGS JSON fields:
- *   server_name          - Komodo server name
- *   runner_network       - Primary Docker network to start the KDD container on
- *   backup_networks      - All networks to connect to: array ["net1","net2"] or string "net1,net2"
- *                          Must include runner_network. Omit to skip extra connects.
- *   config_path          - Host path to the KDD config directory
- *   dump_path            - Host path to the backup output directory
- *   retention_days       - Days to keep backups (default: 7)
- *   timezone             - Container timezone (e.g. "Europe/Rome")
- *   server_display_name  - Label shown in email subject
- *   job_name             - Label shown in email header
- *   image                - KDD image to use (e.g. "ghcr.io/kayaman78/kdd:latest")
- *   smtp.enabled         - "true" | "false"
- *   smtp.host            - SMTP server address
- *   smtp.port            - SMTP port
- *   smtp.user            - SMTP username (leave empty for unauthenticated)
- *   smtp.pass            - SMTP password
- *   smtp.from            - Sender address
- *   smtp.to              - Recipient address(es), comma-separated
- *   smtp.tls             - "auto" | "on" | "off"
- */
-async function runBackup() {
-    // @ts-ignore — ARGS is injected as a local constant by Komodo at runtime
-    const config = ARGS;
-
-    if (!config || !config.server_name) {
-        throw new Error("Error: 'ARGS' parameters not found. Check your JSON field.");
-    }
-
-    console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
-
-    const allNetworks: string[] = config.backup_networks
-        ? (Array.isArray(config.backup_networks)
-            ? config.backup_networks
-            : String(config.backup_networks).split(",").map((n: string) => n.trim())
-          ).filter((n: string) => n.length > 0)
-        : [];
-
-    const extraNetworks = allNetworks.filter((n: string) => n !== config.runner_network);
-
-    console.log(`🌐 Runner network : ${config.runner_network}`);
-    console.log(`🌐 Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
-
-    const containerName = `kdd-backup-runner`;
-    const terminalName  = `kdd-backup-temp`;
-
-    const networkConnectCmds = extraNetworks.length > 0
-        ? extraNetworks.map((n: string) => `docker network connect ${n} ${containerName}`).join(" && \\\n")
-        : "echo '  No extra networks to connect'";
-
-    const dockerCommand = `
-set -e
-
-trap 'echo "[KDD] Removing container..."; docker rm -f ${containerName} 2>/dev/null || true' EXIT
-
-echo "[KDD] Pulling ${config.image}..."
-docker pull ${config.image}
-
-echo "[KDD] Starting container on network: ${config.runner_network}"
-docker run -d \\
-  --name ${containerName} \\
-  --network ${config.runner_network} \\
-  -v /var/run/docker.sock:/var/run/docker.sock:ro \\
-  -v ${config.config_path}:/config:ro \\
-  -v ${config.dump_path}:/backups \\
-  -e RETENTION_DAYS=${config.retention_days} \\
-  -e TZ=${config.timezone} \\
-  -e ENABLE_EMAIL=${config.smtp.enabled} \\
-  -e SMTP_HOST=${config.smtp.host} \\
-  -e SMTP_PORT=${config.smtp.port} \\
-  -e SMTP_USER=${config.smtp.user} \\
-  -e SMTP_PASS='${config.smtp.pass}' \\
-  -e SMTP_FROM=${config.smtp.from} \\
-  -e SMTP_TO=${config.smtp.to} \\
-  -e SMTP_TLS=${config.smtp.tls} \\
-  -e SERVER_NAME='${config.server_display_name}' \\
-  -e JOB_NAME='${config.job_name}' \\
-  --entrypoint sleep ${config.image} infinity
-
-echo "[KDD] Connecting extra networks..."
-${networkConnectCmds}
-
-echo "[KDD] Running backup..."
-docker exec ${containerName} /app/backup.sh
-`.trim();
-
-    let exitCode: string | null = null;
-    let executionFinished = false;
-
-    try {
-        await komodo.write("CreateTerminal", {
-            server: config.server_name,
-            name: terminalName,
-            command: "bash",
-            recreate: Types.TerminalRecreateMode.Always,
-        });
-        console.log("✅ Terminal created.");
-
-        await komodo.execute_terminal(
-            {
-                server: config.server_name,
-                terminal: terminalName,
-                command: dockerCommand,
-            },
-            {
-                onLine: (line: string) => console.log(`[KDD] ${line}`),
-                onFinish: (code: string) => {
-                    exitCode = code;
-                    executionFinished = true;
-                },
-            }
-        );
-
-        while (!executionFinished) {
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        if (exitCode === "0") {
-            console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
-        } else {
-            throw new Error(`Backup failed with exit code: ${exitCode}`);
-        }
-
-    } catch (err: any) {
-        console.error(`❌ CRITICAL ERROR: ${err.message}`);
-        throw err;
-
-    } finally {
-        console.log("🧹 Cleaning up terminal resources...");
-        try {
-            await komodo.execute_terminal(
-                {
-                    server: config.server_name,
-                    terminal: terminalName,
-                    command: "exit 0",
-                },
-                { onLine: () => {}, onFinish: () => {} }
-            );
-
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            await komodo.write("DeleteTerminal", {
-                server: config.server_name,
-                name: terminalName,
-                terminal: terminalName
-            } as any);
-
-            console.log("✅ Terminal resource removed.");
-        } catch (e) {
-            console.log("⚠️ Cleanup: Terminal already closed.");
-        }
-    }
-}
-
-await runBackup();
-```
+> Always use the file from the repo — it stays in sync with new features and parameters.
 
 ### 3. Configure Action Parameters
 
@@ -266,27 +105,36 @@ Add this JSON to your Action's configuration field or use always updated [argume
 {
   "server_name": "prod-server-01",
   "runner_network": "bridge-01",
-  "backup_networks": [
-    "bridge-01",
-    "bridge-02",
-    "bridge-03"
-  ],
+  "backup_networks": ["bridge-01", "bridge-02"],
   "config_path": "/data/stacks/production/kdd/config",
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
   "timezone": "Europe/Rome",
-  "server_display_name": "Server principale",
-  "job_name": "Backup stack 01",
+  "server_display_name": "prod-server-01",
+  "job_name": "Backup Report",
   "image": "ghcr.io/kayaman78/kdd:latest",
   "smtp": {
-    "enabled": "true",
-    "host": "smtp.gmail.com",
+    "enabled": "false",
+    "host": "smtp.example.com",
     "port": "587",
-    "user": "backup@mycompany.com",
-    "pass": "your-app-password",
-    "from": "backup@mycompany.com",
-    "to": "admin@mycompany.com,ops@mycompany.com",
+    "user": "",
+    "pass": "",
+    "from": "kdd@example.com",
+    "to": "admin@example.com",
     "tls": "auto"
+  },
+  "telegram": {
+    "enabled": "false",
+    "token": "123456:ABC-your-bot-token",
+    "chat_id": "-1001234567890"
+  },
+  "ntfy": {
+    "enabled": "false",
+    "url": "https://ntfy.sh",
+    "topic": "kdd-backups"
+  },
+  "notify": {
+    "attach_log": "false"
   }
 }
 ```
@@ -294,6 +142,38 @@ Add this JSON to your Action's configuration field or use always updated [argume
 ### 4. Schedule Backups
 
 Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups.
+
+---
+
+## Notifications
+
+KDD supports three independent notification channels. Each can be enabled or disabled without affecting the others.
+
+### Email
+
+Full HTML report with color-coded table, per-database Backup and Verify status, disk usage summary. Best for detailed post-run review.
+
+### Telegram
+
+Compact message sent to a bot/channel. Requires a bot token and chat ID. Set `telegram.enabled: "true"` and fill `token` and `chat_id`.
+
+Example message:
+```
+KDD Backup — prod-server | 2025-01-15 03:00
+MySQL 2 OK 0 ERR
+PostgreSQL 1 OK 0 ERR
+Verify 3 OK 0 WARN 0 ERR
+```
+
+### ntfy
+
+Sends a push notification to any ntfy-compatible client (ntfy.sh or self-hosted). Priority is set automatically: default on success, urgent on any backup or verify error — useful to wake up the device even in Do Not Disturb mode.
+
+Set `ntfy.enabled: "true"`, `ntfy.url` and `ntfy.topic`.
+
+### Log attachment
+
+Set `notify.attach_log: "true"` to attach the current day's log file to both Telegram and ntfy notifications. Useful to inspect errors directly from the phone without opening SSH.
 
 ---
 
@@ -305,12 +185,6 @@ Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for
 - Separate email notifications per environment
 - Network isolation for security
 
-**Example setup**:
-
-- Action 1: `network: "production"` → backs up all prod databases
-- Action 2: `network: "staging"` → backs up all staging databases
-- Action 3: `network: "services"` → backs up auxiliary services
-
 ---
 
 ## Configuration Parameters
@@ -318,12 +192,12 @@ Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `server_name` | Komodo server name | required |
-| `network` | Docker network to backup | required |
+| `runner_network` | Primary Docker network | required |
 | `config_path` | Path to config.yaml | required |
 | `dump_path` | Backup storage directory | required |
 | `retention_days` | Days to keep backups | `7` |
 | `timezone` | Container timezone | `Europe/Rome` |
-| `server_display_name` | Name in email subject | `KDD` |
+| `server_display_name` | Name in notifications | `KDD` |
 | `job_name` | Name in email header | `Backup Report` |
 | `smtp.enabled` | Enable email reports | `false` |
 | `smtp.host` | SMTP server | - |
@@ -333,6 +207,13 @@ Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for
 | `smtp.from` | From email address | - |
 | `smtp.to` | To email (comma-separated) | - |
 | `smtp.tls` | TLS mode: auto/on/off | `auto` |
+| `telegram.enabled` | Enable Telegram notifications | `false` |
+| `telegram.token` | Bot token | - |
+| `telegram.chat_id` | Chat or channel ID | - |
+| `ntfy.enabled` | Enable ntfy notifications | `false` |
+| `ntfy.url` | ntfy server URL | - |
+| `ntfy.topic` | ntfy topic | - |
+| `notify.attach_log` | Attach log to push notifications | `false` |
 
 ---
 
@@ -341,20 +222,51 @@ Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for
 1. **Setup**: `setup.sh` scans Docker containers and generates `config.yaml`
 2. **Execution**: Komodo Action triggers `backup.sh` with network filter
 3. **Backup**: Creates compressed dumps of all databases on specified network
-4. **Rotation**: Removes backups older than retention period
-5. **Notification**: Sends HTML email report with results
+4. **Verification**: Checks gzip integrity, dump completion marker, and size trend
+5. **Rotation**: Removes backups and logs older than retention period
+6. **Notification**: Sends email report, Telegram message, and/or ntfy alert — each independently
 
 ---
 
-## Email Reports
+## How Verification Works
 
-KDD sends professional HTML email reports with:
+After each backup is created, KDD runs three checks in sequence.
 
-- Color-coded status (green/yellow/red)
-- Per-database backup status and size
-- Customizable server name in subject
-- Customizable job name in header
-- Total disk usage footer
+**1. gzip integrity**
+Runs `gzip -t` on the `.gz` file. Catches truncated or corrupt archives caused by write errors, disk issues, or interrupted dumps.
+
+**2. Dump completion marker**
+Reads the last 5 lines of the compressed dump via `zcat | tail -5` — no full decompression needed. Checks for the marker that the dump tool always writes as the final line when it completes successfully:
+
+- MySQL/MariaDB → `Dump completed`
+- PostgreSQL → `PostgreSQL database dump complete`
+- MongoDB → not applicable; mongodump writes atomically, gzip integrity + non-empty is sufficient
+
+**3. Size trend**
+Compares the size of the new backup against the most recent previous backup for the same database. If the new file is smaller by more than `SIZE_DROP_WARN`% (default: 20%), the verify is marked WARN. This catches silent data loss.
+
+### Verify vs Backup status in the email
+
+| Backup | Verify | Meaning |
+|--------|--------|---------|
+| success | OK | Backup written and verified clean |
+| success | WARN | Backup valid but size dropped unexpectedly — investigate |
+| success | FAIL | Backup written but corrupt or incomplete — do not rely on it |
+| failed | skipped | Backup failed, verify not attempted |
+
+---
+
+## Log Structure
+
+```
+/backups/
+├── <db-name>/
+│   └── dump-YYYY-MM-DD_HH-MM.sql.gz
+└── log/
+    ├── backup_20250115.log
+    ├── backup_20250116.log
+    └── ...
+```
 
 ---
 
@@ -370,65 +282,21 @@ docker build -t kdd:latest .
 
 ---
 
-## How Verification Works
-
-After each backup is created, KDD runs three checks in sequence. A backup must pass all three to be marked ✅ OK.
-
-**1. gzip integrity**
-Runs `gzip -t` on the `.gz` file. Catches truncated or corrupt archives caused by write errors, disk issues, or interrupted dumps.
-
-**2. Dump completion marker**
-Reads the last 5 lines of the compressed dump via `zcat | tail -5` — no full decompression needed. Checks for the marker that the dump tool always writes as the final line when it completes successfully:
-
-- MySQL/MariaDB → `Dump completed`
-- PostgreSQL → `PostgreSQL database dump complete`
-- MongoDB → marker not applicable; mongodump writes atomically, so gzip integrity + non-empty file is sufficient
-
-If the marker is missing, the dump was interrupted mid-write and the backup is incomplete.
-
-**3. Size trend**
-Compares the size of the new backup against the most recent previous backup for the same database. If the new file is smaller by more than `SIZE_DROP_WARN`% (default: 20%), the verify is marked ⚠️ WARN with the old and new sizes shown. This catches silent data loss — for example a service that wiped its tables or a misconfiguration that truncated data before the backup ran.
-
-### Verify vs Backup status in the email
-
-The email report has two separate columns per database row:
-
-| Backup | Verify | Meaning |
-|--------|--------|---------|
-| ✅ success | ✅ OK | Backup written and verified clean |
-| ✅ success | ⚠️ WARN | Backup valid but size dropped unexpectedly — investigate |
-| ✅ success | ❌ FAIL | Backup written but corrupt or incomplete — do not rely on it |
-| ❌ failed | — skipped | Backup failed, verify not attempted |
-
-A WARN does not block the process — the backup is kept and the service continues. A FAIL is reflected in the email subject line.
-
----
-
-## Log Structure
-
-Logs are stored in a dedicated subdirectory with one file per day, rotated automatically using the same `RETENTION_DAYS` policy as backups.
-
-```
-/backups/
-├── <db-name>/
-│   └── dump-YYYY-MM-DD_HH-MM.sql.gz
-└── log/
-    ├── backup_20250115.log
-    ├── backup_20250116.log
-    └── ...
-```
-
----
-
 ## Changelog
+
+### v1.0.7
+- Added Telegram push notifications (independent of email and ntfy)
+- Added ntfy push notifications (independent of email and Telegram)
+- Added `notify.attach_log` option to attach the daily log to push notifications
+- ntfy priority set to urgent automatically on backup or verify errors
 
 ### v1.0.6
 - Added backup verification (gzip integrity, dump completion marker, size trend)
 - Added `SIZE_DROP_WARN` env var (default: 20%)
 - Email report now has separate Backup and Verify columns
-- Email subject now reflects verify outcome (✅ SUCCESS / ⚠️ WARN / ⚠️ PARTIAL / ❌ FAILED)
+- Email subject now reflects verify outcome
 - Log files are now daily (`backup_YYYYMMDD.log`) stored in `/backups/log/`
-- Log retention now follows `RETENTION_DAYS` — old log files are deleted automatically
+- Log retention now follows `RETENTION_DAYS`
 
 ### v1.0.5
 - Added `backup_networks` parameter to connect container to multiple Docker networks
