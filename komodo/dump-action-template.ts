@@ -40,7 +40,7 @@ async function runBackup() {
         throw new Error("Error: 'ARGS' parameters not found. Check your JSON field.");
     }
 
-    console.log(`Starting KDD Backup on server: ${config.server_name}`);
+    console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
 
     const allNetworks: string[] = config.backup_networks
         ? (Array.isArray(config.backup_networks)
@@ -51,8 +51,8 @@ async function runBackup() {
 
     const extraNetworks = allNetworks.filter((n: string) => n !== config.runner_network);
 
-    console.log(`Runner network : ${config.runner_network}`);
-    console.log(`Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
+    console.log(`🌐 Runner network : ${config.runner_network}`);
+    console.log(`🌐 Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
 
     const containerName = `kdd-backup-runner`;
     const terminalName  = `kdd-backup-temp`;
@@ -114,7 +114,7 @@ docker exec ${containerName} /app/backup.sh
             command: "bash",
             recreate: Types.TerminalRecreateMode.Always,
         });
-        console.log("Terminal created.");
+        console.log("✅ Terminal created.");
 
         await komodo.execute_terminal(
             {
@@ -136,17 +136,17 @@ docker exec ${containerName} /app/backup.sh
         }
 
         if (exitCode === "0") {
-            console.log("BACKUP COMPLETED SUCCESSFULLY");
+            console.log("✅ BACKUP COMPLETED SUCCESSFULLY");
         } else {
             throw new Error(`Backup failed with exit code: ${exitCode}`);
         }
 
     } catch (err: any) {
-        console.error(`CRITICAL ERROR: ${err.message}`);
+        console.error(`❌ CRITICAL ERROR: ${err.message}`);
         throw err;
 
     } finally {
-        console.log("Cleaning up terminal resources...");
+        console.log("🧹 Cleaning up terminal resources...");
         try {
             await komodo.execute_terminal(
                 {
@@ -165,9 +165,9 @@ docker exec ${containerName} /app/backup.sh
                 terminal: terminalName
             } as any);
 
-            console.log("Terminal resource removed.");
+            console.log("✅ Terminal resource removed.");
         } catch (e) {
-            console.log("Cleanup: Terminal already closed.");
+            console.log("⚠️ Cleanup: Terminal already closed.");
         }
     }
 }
