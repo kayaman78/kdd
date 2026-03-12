@@ -10,17 +10,30 @@
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
   "timezone": "Europe/Rome",
-  "server_display_name": "Server principale",
-  "job_name": "Backup stack 01",
+  "server_display_name": "prod-server-01",
+  "job_name": "Backup Report",
   "image": "ghcr.io/kayaman78/kdd:latest",
   "smtp": {
-    "enabled": "true",
-    "host": "smtp.gmail.com",
+    "enabled": "false",
+    "host": "smtp.example.com",
     "port": "587",
-    "user": "backup@mycompany.com",
-    "pass": "your-app-password",
-    "from": "backup@mycompany.com",
-    "to": "admin@mycompany.com,ops@mycompany.com",
+    "user": "",
+    "pass": "",
+    "from": "kdd@example.com",
+    "to": "admin@example.com",
     "tls": "auto"
+  },
+  "telegram": {
+    "enabled": "false",
+    "token": "123456:ABC-your-bot-token",
+    "chat_id": "-1001234567890"
+  },
+  "ntfy": {
+    "enabled": "false",
+    "url": "https://ntfy.sh",
+    "topic": "kdd-backups"
+  },
+  "notify": {
+    "attach_log": "false"
   }
 }
