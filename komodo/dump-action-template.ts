@@ -13,7 +13,7 @@
  *   dump_path            - Host path to the backup output directory
  *   retention_days       - Days to keep backups (default: 7)
  *   timezone             - Container timezone (e.g. "Europe/Rome")
- *   server_display_name  - Label shown in email subject
+ *   server_display_name  - Label shown in email subject and push notifications
  *   job_name             - Label shown in email header
  *   image                - KDD image to use (e.g. "ghcr.io/kayaman78/kdd:latest")
  *   smtp.enabled         - "true" | "false"
@@ -24,6 +24,13 @@
  *   smtp.from            - Sender address
  *   smtp.to              - Recipient address(es), comma-separated
  *   smtp.tls             - "auto" | "on" | "off"
+ *   telegram.enabled     - "true" | "false"
+ *   telegram.token       - Telegram bot token
+ *   telegram.chat_id     - Telegram chat/channel ID
+ *   ntfy.enabled         - "true" | "false"
+ *   ntfy.url             - ntfy server URL (e.g. "https://ntfy.sh" or self-hosted)
+ *   ntfy.topic           - ntfy topic name
+ *   notify.attach_log    - "true" | "false" — attach log file to push notifications
  */
 async function runBackup() {
     // @ts-ignore — ARGS is injected as a local constant by Komodo at runtime
@@ -33,13 +40,8 @@ async function runBackup() {
         throw new Error("Error: 'ARGS' parameters not found. Check your JSON field.");
     }
 
-    console.log(`🚀 Starting KDD Backup on server: ${config.server_name}`);
+    console.log(`Starting KDD Backup on server: ${config.server_name}`);
 
-    // -------------------------------------------------------------------------
-    // Resolve all networks to connect to.
-    // runner_network is always first (used in docker run).
-    // backup_networks may include it too — we deduplicate and skip it on connect.
-    // -------------------------------------------------------------------------
     const allNetworks: string[] = config.backup_networks
         ? (Array.isArray(config.backup_networks)
             ? config.backup_networks
@@ -47,44 +49,26 @@ async function runBackup() {
           ).filter((n: string) => n.length > 0)
         : [];
 
-    // Extra networks = all except runner_network (already attached at docker run)
     const extraNetworks = allNetworks.filter((n: string) => n !== config.runner_network);
 
-    console.log(`🌐 Runner network : ${config.runner_network}`);
-    console.log(`🌐 Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
+    console.log(`Runner network : ${config.runner_network}`);
+    console.log(`Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
 
-    // -------------------------------------------------------------------------
-    // Unique container name for this run
-    // -------------------------------------------------------------------------
     const containerName = `kdd-backup-runner`;
     const terminalName  = `kdd-backup-temp`;
 
-    // -------------------------------------------------------------------------
-    // Build network connect commands (step 3)
-    // -------------------------------------------------------------------------
     const networkConnectCmds = extraNetworks.length > 0
         ? extraNetworks.map((n: string) => `docker network connect ${n} ${containerName}`).join(" && \\\n")
         : "echo '  No extra networks to connect'";
 
-    // -------------------------------------------------------------------------
-    // Full shell sequence:
-    //   1. Pull latest image
-    //   2. Start container detached (sleeps, waits for exec)
-    //   3. Connect to extra networks
-    //   4. Execute backup
-    //   5. Cleanup container (always, via trap)
-    // -------------------------------------------------------------------------
     const dockerCommand = `
 set -e
 
-# Ensure cleanup on exit regardless of outcome
 trap 'echo "[KDD] Removing container..."; docker rm -f ${containerName} 2>/dev/null || true' EXIT
 
-# 1. Pull latest image
 echo "[KDD] Pulling ${config.image}..."
 docker pull ${config.image}
 
-# 2. Start container detached on primary network
 echo "[KDD] Starting container on network: ${config.runner_network}"
 docker run -d \\
   --name ${containerName} \\
@@ -104,13 +88,18 @@ docker run -d \\
   -e SMTP_TLS=${config.smtp.tls} \\
   -e SERVER_NAME='${config.server_display_name}' \\
   -e JOB_NAME='${config.job_name}' \\
+  -e TELEGRAM_ENABLED=${config.telegram?.enabled ?? 'false'} \\
+  -e TELEGRAM_TOKEN=${config.telegram?.token ?? ''} \\
+  -e TELEGRAM_CHAT_ID=${config.telegram?.chat_id ?? ''} \\
+  -e NTFY_ENABLED=${config.ntfy?.enabled ?? 'false'} \\
+  -e NTFY_URL=${config.ntfy?.url ?? ''} \\
+  -e NTFY_TOPIC=${config.ntfy?.topic ?? ''} \\
+  -e NOTIFY_ATTACH_LOG=${config.notify?.attach_log ?? 'false'} \\
   --entrypoint sleep ${config.image} infinity
 
-# 3. Connect to extra networks
 echo "[KDD] Connecting extra networks..."
 ${networkConnectCmds}
 
-# 4. Execute backup
 echo "[KDD] Running backup..."
 docker exec ${containerName} /app/backup.sh
 `.trim();
@@ -119,16 +108,14 @@ docker exec ${containerName} /app/backup.sh
     let executionFinished = false;
 
     try {
-        // Create terminal
         await komodo.write("CreateTerminal", {
             server: config.server_name,
             name: terminalName,
             command: "bash",
             recreate: Types.TerminalRecreateMode.Always,
         });
-        console.log("✅ Terminal created.");
+        console.log("Terminal created.");
 
-        // Execute
         await komodo.execute_terminal(
             {
                 server: config.server_name,
@@ -149,17 +136,17 @@ docker exec ${containerName} /app/backup.sh
         }
 
         if (exitCode === "0") {
-            console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
+            console.log("BACKUP COMPLETED SUCCESSFULLY");
         } else {
             throw new Error(`Backup failed with exit code: ${exitCode}`);
         }
 
     } catch (err: any) {
-        console.error(`❌ CRITICAL ERROR: ${err.message}`);
+        console.error(`CRITICAL ERROR: ${err.message}`);
         throw err;
 
     } finally {
-        console.log("🧹 Cleaning up terminal resources...");
+        console.log("Cleaning up terminal resources...");
         try {
             await komodo.execute_terminal(
                 {
@@ -178,9 +165,9 @@ docker exec ${containerName} /app/backup.sh
                 terminal: terminalName
             } as any);
 
-            console.log("✅ Terminal resource removed.");
+            console.log("Terminal resource removed.");
         } catch (e) {
-            console.log("⚠️ Cleanup: Terminal already closed.");
+            console.log("Cleanup: Terminal already closed.");
         }
     }
 }
