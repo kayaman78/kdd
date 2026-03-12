@@ -42,6 +42,19 @@ SMTP_TLS=${SMTP_TLS:-auto}
 SERVER_NAME=${SERVER_NAME:-KDD}
 JOB_NAME=${JOB_NAME:-Backup Report}
 
+# Telegram (optional)
+TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-false}
+TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-}
+TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+
+# ntfy (optional)
+NTFY_ENABLED=${NTFY_ENABLED:-false}
+NTFY_URL=${NTFY_URL:-}
+NTFY_TOPIC=${NTFY_TOPIC:-}
+
+# Attach log to push notifications
+NOTIFY_ATTACH_LOG=${NOTIFY_ATTACH_LOG:-false}
+
 NETWORK_FILTER=""
 
 while [[ $# -gt 0 ]]; do
@@ -331,6 +344,88 @@ send_email() {
 }
 
 # -----------------------------------------------------------------------------
+# NOTIFICATION FUNCTIONS
+# Each channel is fully independent. All use the same compact text summary.
+# -----------------------------------------------------------------------------
+
+build_text_summary() {
+    local icon="✅"
+    [ $failed_backups -gt 0 ] && icon="❌"
+    [ $failed_backups -eq 0 ] && [ $verify_warn -gt 0 ] && icon="⚠️"
+    [ $verify_err -gt 0 ] && icon="❌"
+
+    local db_lines=""
+    [ "$mysql_count" -gt 0 ] && db_lines+="MySQL ${mysql_ok}✅ ${mysql_fail}❌\n"
+    [ "$pg_count"    -gt 0 ] && db_lines+="PostgreSQL ${pg_ok}✅ ${pg_fail}❌\n"
+    [ "$mongo_count" -gt 0 ] && db_lines+="MongoDB ${mongo_ok}✅ ${mongo_fail}❌\n"
+
+    printf "%s KDD Backup — %s | %s\n%sVerify %s✅ %s⚠️ %s❌" \
+        "$icon" "$SERVER_NAME" "$TIMESTAMP" \
+        "$db_lines" \
+        "$verify_ok" "$verify_warn" "$verify_err"
+}
+
+send_telegram() {
+    [ "$TELEGRAM_ENABLED" != "true" ] && return 0
+    if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+        log "WARNING: Telegram enabled but TOKEN or CHAT_ID missing — skipping"
+        return 1
+    fi
+
+    local text api
+    text=$(build_text_summary)
+    api="https://api.telegram.org/bot${TELEGRAM_TOKEN}"
+
+    if [ "$NOTIFY_ATTACH_LOG" = "true" ] && [ -f "$LOG_FILE" ]; then
+        curl -sf -X POST "${api}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "caption=${text}" \
+            -F "document=@${LOG_FILE}" \
+            > /dev/null 2>&1 \
+            && log "Telegram: sent with log attachment." \
+            || log "WARNING: Telegram delivery failed."
+    else
+        curl -sf -X POST "${api}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${text}\"}" \
+            > /dev/null 2>&1 \
+            && log "Telegram: sent." \
+            || log "WARNING: Telegram delivery failed."
+    fi
+}
+
+send_ntfy() {
+    [ "$NTFY_ENABLED" != "true" ] && return 0
+    if [ -z "$NTFY_URL" ] || [ -z "$NTFY_TOPIC" ]; then
+        log "WARNING: ntfy enabled but URL or TOPIC missing — skipping"
+        return 1
+    fi
+
+    local text priority=3
+    text=$(build_text_summary)
+    { [ $failed_backups -gt 0 ] || [ $verify_err -gt 0 ]; } && priority=5
+
+    if [ "$NOTIFY_ATTACH_LOG" = "true" ] && [ -f "$LOG_FILE" ]; then
+        curl -sf -X PUT "${NTFY_URL}/${NTFY_TOPIC}" \
+            -H "Title: KDD Backup — ${SERVER_NAME}" \
+            -H "Priority: ${priority}" \
+            -H "Filename: $(basename "$LOG_FILE")" \
+            --data-binary "@${LOG_FILE}" \
+            > /dev/null 2>&1 \
+            && log "ntfy: sent with log attachment." \
+            || log "WARNING: ntfy delivery failed."
+    else
+        curl -sf -X POST "${NTFY_URL}/${NTFY_TOPIC}" \
+            -H "Title: KDD Backup — ${SERVER_NAME}" \
+            -H "Priority: ${priority}" \
+            -d "$text" \
+            > /dev/null 2>&1 \
+            && log "ntfy: sent." \
+            || log "WARNING: ntfy delivery failed."
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # HELPERS
 # -----------------------------------------------------------------------------
 
@@ -373,6 +468,10 @@ verify_ok=0
 verify_warn=0
 verify_err=0
 backup_details=""
+# per-type counters for push summary
+mysql_ok=0;  mysql_fail=0
+pg_ok=0;     pg_fail=0
+mongo_ok=0;  mongo_fail=0
 
 # -----------------------------------------------------------------------------
 # MYSQL
@@ -409,7 +508,7 @@ if [ "$mysql_count" -gt 0 ]; then
 
             size=$(du -h "$filepath" | cut -f1)
             log "    Backup OK: $size"
-            ((total_backups++))
+            ((total_backups++)); ((mysql_ok++))
 
             log "    Verifying: $name"
             verify_result=$(_do_verify "mysql" "$filepath" "$target")
@@ -426,7 +525,7 @@ if [ "$mysql_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  Failed: $name"
-            ((failed_backups++))
+            ((failed_backups++)); ((mysql_fail++))
             backup_details+=$(add_db_to_report "$name" "MySQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
         fi
@@ -469,7 +568,7 @@ if [ "$pg_count" -gt 0 ]; then
 
             size=$(du -h "$filepath" | cut -f1)
             log "    Backup OK: $size"
-            ((total_backups++))
+            ((total_backups++)); ((pg_ok++))
 
             log "    Verifying: $name"
             verify_result=$(_do_verify "postgres" "$filepath" "$target")
@@ -486,7 +585,7 @@ if [ "$pg_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  Failed: $name"
-            ((failed_backups++))
+            ((failed_backups++)); ((pg_fail++))
             backup_details+=$(add_db_to_report "$name" "PostgreSQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
         fi
@@ -531,7 +630,7 @@ if [ "$mongo_count" -gt 0 ]; then
 
             size=$(du -h "$filepath" | cut -f1)
             log "    Backup OK: $size"
-            ((total_backups++))
+            ((total_backups++)); ((mongo_ok++))
 
             log "    Verifying: $name"
             verify_result=$(_do_verify "mongo" "$filepath" "$target")
@@ -548,7 +647,7 @@ if [ "$mongo_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  Failed: $name"
-            ((failed_backups++))
+            ((failed_backups++)); ((mongo_fail++))
             backup_details+=$(add_db_to_report "$name" "MongoDB" "failed" "N/A" "skipped")
             rm -f "$filepath"
         fi
@@ -596,6 +695,9 @@ if [ "$ENABLE_EMAIL" = "true" ]; then
 
     send_email "$subject" "$html_report"
 fi
+
+send_telegram
+send_ntfy
 
 [ $failed_backups -gt 0 ] && exit 1
 exit 0
