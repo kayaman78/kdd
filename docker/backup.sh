@@ -368,7 +368,7 @@ build_text_summary() {
 send_telegram() {
     [ "$TELEGRAM_ENABLED" != "true" ] && return 0
     if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-        log "WARNING: Telegram enabled but TOKEN or CHAT_ID missing — skipping"
+        log "⚠️  WARNING: Telegram enabled but TOKEN or CHAT_ID missing — skipping"
         return 1
     fi
 
@@ -382,22 +382,22 @@ send_telegram() {
             -F "caption=${text}" \
             -F "document=@${LOG_FILE}" \
             > /dev/null 2>&1 \
-            && log "Telegram: sent with log attachment." \
-            || log "WARNING: Telegram delivery failed."
+            && log "📨 Telegram: sent with log attachment." \
+            || log "⚠️  WARNING: Telegram delivery failed."
     else
         curl -sf -X POST "${api}/sendMessage" \
             -H "Content-Type: application/json" \
             -d "{\"chat_id\":\"${TELEGRAM_CHAT_ID}\",\"text\":\"${text}\"}" \
             > /dev/null 2>&1 \
-            && log "Telegram: sent." \
-            || log "WARNING: Telegram delivery failed."
+            && log "📨 Telegram: sent." \
+            || log "⚠️  WARNING: Telegram delivery failed."
     fi
 }
 
 send_ntfy() {
     [ "$NTFY_ENABLED" != "true" ] && return 0
     if [ -z "$NTFY_URL" ] || [ -z "$NTFY_TOPIC" ]; then
-        log "WARNING: ntfy enabled but URL or TOPIC missing — skipping"
+        log "⚠️  WARNING: ntfy enabled but URL or TOPIC missing — skipping"
         return 1
     fi
 
@@ -412,16 +412,16 @@ send_ntfy() {
             -H "Filename: $(basename "$LOG_FILE")" \
             --data-binary "@${LOG_FILE}" \
             > /dev/null 2>&1 \
-            && log "ntfy: sent with log attachment." \
-            || log "WARNING: ntfy delivery failed."
+            && log "📨 ntfy: sent with log attachment." \
+            || log "⚠️  WARNING: ntfy delivery failed."
     else
         curl -sf -X POST "${NTFY_URL}/${NTFY_TOPIC}" \
             -H "Title: KDD Backup — ${SERVER_NAME}" \
             -H "Priority: ${priority}" \
             -d "$text" \
             > /dev/null 2>&1 \
-            && log "ntfy: sent." \
-            || log "WARNING: ntfy delivery failed."
+            && log "📨 ntfy: sent." \
+            || log "⚠️  WARNING: ntfy delivery failed."
     fi
 }
 
@@ -454,9 +454,9 @@ _do_verify() {
 
 init_log
 
-log "KDD - Starting backup"
-log "Retention: $RETENTION_DAYS days | Size drop warn threshold: ${SIZE_DROP_WARN}%"
-[ -n "$NETWORK_FILTER" ] && log "Network filter: $NETWORK_FILTER"
+log "🚀 KDD - Starting backup"
+log "⚙️  Retention: $RETENTION_DAYS days | Size drop warn threshold: ${SIZE_DROP_WARN}%"
+[ -n "$NETWORK_FILTER" ] && log "🌐 Network filter: $NETWORK_FILTER"
 
 [ ! -f "$CONFIG" ] && log_error "config.yaml not found" && exit 1
 
@@ -480,7 +480,7 @@ mongo_ok=0;  mongo_fail=0
 mysql_count=$(yq e '.mysql | length' "$CONFIG")
 
 if [ "$mysql_count" -gt 0 ]; then
-    log "Processing MySQL/MariaDB ($mysql_count databases)"
+    log "🗄️  Processing MySQL/MariaDB ($mysql_count databases)"
 
     for i in $(seq 0 $((mysql_count-1))); do
         name=$(yq e ".mysql[$i].name" "$CONFIG")
@@ -492,7 +492,7 @@ if [ "$mysql_count" -gt 0 ]; then
         network=$(yq e ".mysql[$i].network" "$CONFIG")
 
         if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
-            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            log "  ⏭️  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
             continue
         fi
 
@@ -500,17 +500,17 @@ if [ "$mysql_count" -gt 0 ]; then
         mkdir -p "$target"
         filepath="$target/dump-${TIMESTAMP}.sql.gz"
 
-        log "  Backing up: $name"
+        log "  📦 Backing up: $name"
 
         if mysqldump -h "$host" -P "$port" -u "$user" -p"$pass" \
             --single-transaction --routines --triggers --events \
             "$db" 2>/dev/null | gzip > "$filepath"; then
 
             size=$(du -h "$filepath" | cut -f1)
-            log "    Backup OK: $size"
+            log "    ✅ Backup OK: $size"
             ((total_backups++)); ((mysql_ok++))
 
-            log "    Verifying: $name"
+            log "    🔍 Verifying: $name"
             verify_result=$(_do_verify "mysql" "$filepath" "$target")
             verify_code="${verify_result%%:*}"
             log "    Verify: $verify_result"
@@ -524,7 +524,7 @@ if [ "$mysql_count" -gt 0 ]; then
             backup_details+=$(add_db_to_report "$name" "MySQL" "success" "$size" "$verify_result")
             rotate_backups "$target"
         else
-            log_error "  Failed: $name"
+            log_error "  ❌ Failed: $name"
             ((failed_backups++)); ((mysql_fail++))
             backup_details+=$(add_db_to_report "$name" "MySQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
@@ -539,7 +539,7 @@ fi
 pg_count=$(yq e '.postgres | length' "$CONFIG")
 
 if [ "$pg_count" -gt 0 ]; then
-    log "Processing PostgreSQL ($pg_count databases)"
+    log "🗄️  Processing PostgreSQL ($pg_count databases)"
 
     for i in $(seq 0 $((pg_count-1))); do
         name=$(yq e ".postgres[$i].name" "$CONFIG")
@@ -551,7 +551,7 @@ if [ "$pg_count" -gt 0 ]; then
         network=$(yq e ".postgres[$i].network" "$CONFIG")
 
         if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
-            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            log "  ⏭️  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
             continue
         fi
 
@@ -559,7 +559,7 @@ if [ "$pg_count" -gt 0 ]; then
         mkdir -p "$target"
         filepath="$target/dump-${TIMESTAMP}.sql.gz"
 
-        log "  Backing up: $name"
+        log "  📦 Backing up: $name"
 
         export PGPASSWORD="$pass"
 
@@ -567,10 +567,10 @@ if [ "$pg_count" -gt 0 ]; then
             --no-password --clean --if-exists 2>/dev/null | gzip > "$filepath"; then
 
             size=$(du -h "$filepath" | cut -f1)
-            log "    Backup OK: $size"
+            log "    ✅ Backup OK: $size"
             ((total_backups++)); ((pg_ok++))
 
-            log "    Verifying: $name"
+            log "    🔍 Verifying: $name"
             verify_result=$(_do_verify "postgres" "$filepath" "$target")
             verify_code="${verify_result%%:*}"
             log "    Verify: $verify_result"
@@ -584,7 +584,7 @@ if [ "$pg_count" -gt 0 ]; then
             backup_details+=$(add_db_to_report "$name" "PostgreSQL" "success" "$size" "$verify_result")
             rotate_backups "$target"
         else
-            log_error "  Failed: $name"
+            log_error "  ❌ Failed: $name"
             ((failed_backups++)); ((pg_fail++))
             backup_details+=$(add_db_to_report "$name" "PostgreSQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
@@ -601,7 +601,7 @@ fi
 mongo_count=$(yq e '.mongo | length' "$CONFIG")
 
 if [ "$mongo_count" -gt 0 ]; then
-    log "Processing MongoDB ($mongo_count databases)"
+    log "🗄️  Processing MongoDB ($mongo_count databases)"
 
     for i in $(seq 0 $((mongo_count-1))); do
         name=$(yq e ".mongo[$i].name" "$CONFIG")
@@ -614,7 +614,7 @@ if [ "$mongo_count" -gt 0 ]; then
         network=$(yq e ".mongo[$i].network" "$CONFIG")
 
         if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
-            log "  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            log "  ⏭️  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
             continue
         fi
 
@@ -622,17 +622,17 @@ if [ "$mongo_count" -gt 0 ]; then
         mkdir -p "$target"
         filepath="$target/dump-${TIMESTAMP}.archive.gz"
 
-        log "  Backing up: $name"
+        log "  📦 Backing up: $name"
 
         if mongodump --host="$host" --port="$port" --username="$user" \
             --password="$pass" --authenticationDatabase="$authdb" \
             --db="$db" --archive="$filepath" --gzip 2>/dev/null && [ -s "$filepath" ]; then
 
             size=$(du -h "$filepath" | cut -f1)
-            log "    Backup OK: $size"
+            log "    ✅ Backup OK: $size"
             ((total_backups++)); ((mongo_ok++))
 
-            log "    Verifying: $name"
+            log "    🔍 Verifying: $name"
             verify_result=$(_do_verify "mongo" "$filepath" "$target")
             verify_code="${verify_result%%:*}"
             log "    Verify: $verify_result"
@@ -646,7 +646,7 @@ if [ "$mongo_count" -gt 0 ]; then
             backup_details+=$(add_db_to_report "$name" "MongoDB" "success" "$size" "$verify_result")
             rotate_backups "$target"
         else
-            log_error "  Failed: $name"
+            log_error "  ❌ Failed: $name"
             ((failed_backups++)); ((mongo_fail++))
             backup_details+=$(add_db_to_report "$name" "MongoDB" "failed" "N/A" "skipped")
             rm -f "$filepath"
@@ -658,7 +658,7 @@ fi
 # LOG RETENTION — same policy as backups
 # -----------------------------------------------------------------------------
 
-log "Removing logs older than $RETENTION_DAYS days..."
+log "🧹 Removing logs older than $RETENTION_DAYS days..."
 DELETED_LOGS=0
 while IFS= read -r -d '' old_log; do
     rm -f "$old_log"
@@ -667,7 +667,7 @@ done < <(
     find "$LOG_DIR" -type f -name "backup_*.log" \
         -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null
 )
-log "Removed $DELETED_LOGS log(s)."
+log "🧹 Removed $DELETED_LOGS log(s)."
 
 # -----------------------------------------------------------------------------
 # SUMMARY
@@ -675,8 +675,8 @@ log "Removed $DELETED_LOGS log(s)."
 
 total=$((total_backups + failed_backups))
 
-log "Backup completed — Success: $total_backups | Failed: $failed_backups"
-log "Verify — OK: $verify_ok | Warn: $verify_warn | Fail: $verify_err"
+log "✅ Backup completed — Success: $total_backups | Failed: $failed_backups"
+log "🔍 Verify — OK: $verify_ok | Warn: $verify_warn | Fail: $verify_err"
 
 if [ "$ENABLE_EMAIL" = "true" ]; then
     html_report=$(generate_html_report "$total" "$failed_backups")
