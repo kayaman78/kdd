@@ -8,7 +8,7 @@
 
 Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
 
-> Part of the **KDD ecosystem** — see also [DABS](https://github.com/kayaman78/dabs) for SQLite backups and [KCR](https://github.com/kayaman78/kcr) to run shell-based backup tools from a Komodo Action.
+> Part of the **KDD ecosystem** — see also [DABS](https://github.com/kayaman78/dabs) for SQLite, [DABV](https://github.com/kayaman78/dabv) for Docker volumes, and [KCR](https://github.com/kayaman78/kcr) to run shell-based backup tools from a Komodo Action.
 
 ---
 
@@ -47,9 +47,13 @@ KDD handles network-based databases via Docker. SQLite is file-based and require
 
 DABS is a standalone bash script that auto-discovers SQLite databases mounted by running containers, stops each service gracefully, compresses the files, and restarts — with WAL support, retention policy, and the same HTML email reporting you get from KDD.
 
+### 📦 [DABV — Docker Automated Backup for Volumes](https://github.com/kayaman78/dabv)
+
+DABV backs up named Docker volumes that don't have a bind mount path. It spins up a temporary Alpine container, mounts the volume read-only, and writes a compressed tar archive to the host — ready for restic or any other tool to pick up.
+
 ### ⚙️ [KCR — Komodo Command Runner](https://github.com/kayaman78/kcr)
 
-KCR is a Komodo Action template that lets you run arbitrary shell commands on your servers directly from Komodo — including DABS. No extra containers, no mounts. Just drop the Action in Komodo, point it at your script, and you're done.
+KCR is a Komodo Action template that lets you run arbitrary shell commands on your servers directly from Komodo — including DABS and DABV. No extra containers, no mounts. Just drop the Action in Komodo, point it at your script, and you're done.
 
 ### Running everything together
 
@@ -57,6 +61,7 @@ The recommended setup is a **Komodo Procedure** that chains KDD and DABS sequent
 
 1. KDD Action → backs up MySQL, PostgreSQL, MongoDB
 2. KCR Action running DABS → backs up all SQLite databases on the same host
+3. KCR Action running DABV → backs up named Docker volumes
 3. One schedule, one place to monitor, separate email reports per job
 
 This gives you complete database coverage across your entire Docker stack with zero overlap and minimal configuration.
@@ -309,6 +314,7 @@ docker build -t kdd:latest .
 | Project | Description |
 |---------|-------------|
 | [DABS](https://github.com/kayaman78/dabs) | Docker automated backup for SQLite |
+| [DABV](https://github.com/kayaman78/dabv) | Docker automated backup for volumes |
 | [KCR](https://github.com/kayaman78/kcr) | Komodo Action to run shell commands on remote servers |
 
 ---
