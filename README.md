@@ -91,7 +91,7 @@ cd /dockerpath/kdd
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
-  ghcr.io/kayaman78/kdd:latest /app/setup.sh --interactive
+  ghcr.io/kayaman78/kdd:latest /app/setup.sh
 ```
 
 See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
@@ -288,6 +288,14 @@ docker build -t kdd:latest .
 ---
 
 ## Changelog
+
+### v1.0.9
+- Removed `--interactive` flag from `setup.sh` — interactive mode is now the only mode
+- Simplified `ask_confirm()` function, removed `INTERACTIVE` variable and related logic
+- Updated `SETUP.md` and `README.md` accordingly
+
+### v1.0.8
+- Added emoji icons to all log output in `backup.sh` for improved readability in Komodo logs
 
 ### v1.0.7
 - Added Telegram push notifications (independent of email and ntfy)
