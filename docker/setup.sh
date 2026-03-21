@@ -12,11 +12,7 @@
 #      always live next to the compose file regardless of data mount type.
 #
 # Usage:
-#   # Automatic mode (add all databases found)
-#   docker run --rm -v ... kdd:latest /app/setup.sh
-#
-#   # Interactive mode (ask for each database)
-#   docker run --rm -it -v ... kdd:latest /app/setup.sh --interactive
+#   docker run --rm -it -v ... kdd:latest /app/setup.sh
 # =============================================================================
 
 set -e
@@ -24,15 +20,10 @@ set -e
 CONFIG="/config/config.yaml"
 DOCKER_ROOT="${DOCKER_ROOT:-/srv/docker}"
 DEFAULT_NETWORK="bridge"
-INTERACTIVE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --interactive|-i)
-            INTERACTIVE=true
-            shift
-            ;;
         --docker-root)
             DOCKER_ROOT="$2"
             shift 2
@@ -132,10 +123,6 @@ add_entry() {
 }
 
 ask_confirm() {
-    if [ "$INTERACTIVE" = false ]; then
-        return 0
-    fi
-
     local prompt="$1"
     # Read from /dev/tty to ensure interactive input works inside Docker
     read -p "$prompt [y/N] " -r response < /dev/tty
@@ -147,7 +134,7 @@ ask_confirm() {
 # -----------------------------------------------------------------------------
 
 log "KDD - Database Discovery Starting"
-log "Mode: $([ "$INTERACTIVE" = true ] && echo "Interactive (will ask for each DB)" || echo "Automatic (add all)")"
+log "Mode: Interactive"
 log "Docker root: $DOCKER_ROOT"
 
 # Verify dependencies
@@ -342,7 +329,6 @@ log ""
 
 if [ "$total" -eq 0 ]; then
     log "WARNING: No databases configured"
-    log "Run with --interactive to select databases manually"
     exit 1
 fi
 
