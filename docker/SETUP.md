@@ -25,6 +25,7 @@ Komodo → **Servers** → Select your server → **Shell**
 ```bash
 mkdir -p /srv/docker/kdd/{config,dump} && \
 cd /srv/docker/kdd && \
+docker pull ghcr.io/kayaman78/kdd:latest && \
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
@@ -36,6 +37,7 @@ docker run --rm -it \
 ```bash
 mkdir -p /opt/containers/kdd/{config,dump} && \
 cd /opt/containers/kdd && \
+docker pull ghcr.io/kayaman78/kdd:latest && \
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
