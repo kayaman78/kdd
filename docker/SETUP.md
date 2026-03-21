@@ -28,7 +28,7 @@ cd /srv/docker/kdd && \
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
-  ghcr.io/kayaman78/kdd:latest /app/setup.sh --interactive
+  ghcr.io/kayaman78/kdd:latest /app/setup.sh
 ```
 
 **Custom path (e.g., `/opt/containers`):**
@@ -39,7 +39,7 @@ cd /opt/containers/kdd && \
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
-  ghcr.io/kayaman78/kdd:latest /app/setup.sh --interactive
+  ghcr.io/kayaman78/kdd:latest /app/setup.sh
 ```
 
 ### 3. Interactive Database Selection
@@ -152,13 +152,7 @@ After setup, you'll have:
 **Solutions:**
 - Verify containers are running: `docker ps`
 - Check container environment variables contain DB credentials
-- Try non-interactive mode to see all containers: 
-  ```bash
-  docker run --rm \
-    -v /var/run/docker.sock:/var/run/docker.sock:ro \
-    -v $(pwd)/config:/config \
-    ghcr.io/kayaman78/kdd:latest /app/setup.sh
-  ```
+- Verify containers are actually running and have DB credentials in their environment variables
 
 ### Permission denied on Docker socket
 
@@ -205,10 +199,10 @@ Continue on: [README.md](README.md)
 
 ```bash
 user@server:~$ mkdir -p /srv/docker/kdd/{config,dump} && cd /srv/docker/kdd
-user@server:/srv/docker/kdd$ docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock:ro -v $(pwd)/config:/config ghcr.io/kayaman78/kdd:latest /app/setup.sh --interactive
+user@server:/srv/docker/kdd$ docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock:ro -v $(pwd)/config:/config ghcr.io/kayaman78/kdd:latest /app/setup.sh
 
 [2025-02-11 15:30:00] KDD - Database Discovery Starting
-[2025-02-11 15:30:00] Mode: Interactive (will ask for each DB)
+[2025-02-11 15:30:00] Mode: Interactive
 [2025-02-11 15:30:00] Docker root: /srv/docker
 [2025-02-11 15:30:01] Created new config.yaml
 [2025-02-11 15:30:01] Scanning Docker containers...
