@@ -88,6 +88,7 @@ Adjust the path of the Docker stacks.
 mkdir -p /dockerpath/kdd/{config,dump}
 cd /dockerpath/kdd
 
+docker pull ghcr.io/kayaman78/kdd:latest && \
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
