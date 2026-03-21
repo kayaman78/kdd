@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.0.7 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.0.9 | **Maintained**: Yes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
