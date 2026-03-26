@@ -9,6 +9,7 @@
   "config_path": "/data/stacks/production/kdd/config",
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
+  "timeout_seconds": 3600,
   "timezone": "Europe/Rome",
   "server_display_name": "prod-server-01",
   "job_name": "Backup Report",

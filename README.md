@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.0.9 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.1.0 | **Maintained**: Yes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -15,7 +15,7 @@ Universal database backup solution for Docker environments, designed to work sea
 ## Features
 
 - **Automatic Discovery**: Scans running Docker containers and detects databases automatically
-- **Multi-Database Support**: MySQL/MariaDB (all versions), PostgreSQL 12-17, MongoDB 4.x-8.x, Redis
+- **Multi-Database Support**: MySQL/MariaDB (all versions), PostgreSQL 12-17, MongoDB 4.x-8.x
 - **Safe Hot Backups**: Uses transaction-safe methods for consistent backups without downtime
 - **Automatic Rotation**: Configurable retention policy (default: 7 days)
 - **Backup Verification**: Every backup is verified immediately after creation (gzip integrity, dump completion marker, size trend)
@@ -62,7 +62,7 @@ The recommended setup is a **Komodo Procedure** that chains KDD and DABS sequent
 1. KDD Action → backs up MySQL, PostgreSQL, MongoDB
 2. KCR Action running DABS → backs up all SQLite databases on the same host
 3. KCR Action running DABV → backs up named Docker volumes
-3. One schedule, one place to monitor, separate email reports per job
+4. One schedule, one place to monitor, separate email reports per job
 
 This gives you complete database coverage across your entire Docker stack with zero overlap and minimal configuration.
 
@@ -115,6 +115,7 @@ Add this JSON to your Action's configuration field or use always updated [argume
   "config_path": "/data/stacks/production/kdd/config",
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
+  "timeout_seconds": 3600,
   "timezone": "Europe/Rome",
   "server_display_name": "prod-server-01",
   "job_name": "Backup Report",
@@ -198,10 +199,13 @@ Set `notify.attach_log: "true"` to attach the current day's log file to both Tel
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `server_name` | Komodo server name | required |
-| `runner_network` | Primary Docker network | required |
-| `config_path` | Path to config.yaml | required |
-| `dump_path` | Backup storage directory | required |
+| `runner_network` | Primary Docker network to start the KDD container on | required |
+| `backup_networks` | All networks to connect to — array or comma-separated string; must include `runner_network` | `[]` |
+| `config_path` | Host path to the KDD config directory | required |
+| `dump_path` | Host path to the backup output directory | required |
+| `image` | KDD Docker image to use | `ghcr.io/kayaman78/kdd:latest` |
 | `retention_days` | Days to keep backups | `7` |
+| `timeout_seconds` | Max seconds to wait for the backup before raising a timeout error | `3600` |
 | `timezone` | Container timezone | `Europe/Rome` |
 | `server_display_name` | Name in notifications | `KDD` |
 | `job_name` | Name in email header | `Backup Report` |
@@ -283,12 +287,20 @@ Pre-built images are available at `ghcr.io/kayaman78/kdd:latest`
 To build locally:
 
 ```bash
-docker build -t kdd:latest .
+docker build -t kdd:latest ./docker/
 ```
 
 ---
 
 ## Changelog
+
+### v1.1.0
+- Fixed backup verification double-output bug — `_check_size_drop` was writing to stdout directly while callers also wrote their own message, producing two lines in `verify_result` and garbled HTML report entries; callers now capture `_check_size_drop` output via `$()` and relay it cleanly
+- Fixed `rotate_backups` retention off-by-one — was using `-mtime +RETENTION_DAYS` (keeps one extra day) instead of `-mtime +"$((RETENTION_DAYS - 1))"`, now consistent with DABS and DABV
+- Fixed `configure_msmtp` TLS configuration — `tls_starttls` was always set to `on`, breaking port 465 (SMTPS/immediate SSL); it is now derived from the port: `465` → `off`, all others → `on`
+- Added `timeout_seconds` parameter to the Komodo Action — prevents the action from hanging indefinitely if a backup stalls; default is 3600 seconds
+- All environment variable values in the Komodo Action `docker run` command are now single-quoted — prevents breakage when values contain spaces or special characters
+- Removed dead `size_result` variable in `verify_mysql_backup`
 
 ### v1.0.9
 - Removed `--interactive` flag from `setup.sh` — interactive mode is now the only mode

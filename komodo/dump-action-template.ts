@@ -16,6 +16,7 @@
  *   server_display_name  - Label shown in email subject and push notifications
  *   job_name             - Label shown in email header
  *   image                - KDD image to use (e.g. "ghcr.io/kayaman78/kdd:latest")
+ *   timeout_seconds      - Max seconds to wait for the backup to complete (default: 3600)
  *   smtp.enabled         - "true" | "false"
  *   smtp.host            - SMTP server address
  *   smtp.port            - SMTP port
@@ -54,6 +55,7 @@ async function runBackup() {
     console.log(`🌐 Runner network : ${config.runner_network}`);
     console.log(`🌐 Extra networks : ${extraNetworks.length > 0 ? extraNetworks.join(", ") : "none"}`);
 
+    const timeoutMs     = (config.timeout_seconds ?? 3600) * 1000;
     const containerName = `kdd-backup-runner`;
     const terminalName  = `kdd-backup-temp`;
 
@@ -74,27 +76,27 @@ docker run -d \\
   --name ${containerName} \\
   --network ${config.runner_network} \\
   -v /var/run/docker.sock:/var/run/docker.sock:ro \\
-  -v ${config.config_path}:/config:ro \\
-  -v ${config.dump_path}:/backups \\
-  -e RETENTION_DAYS=${config.retention_days} \\
-  -e TZ=${config.timezone} \\
-  -e ENABLE_EMAIL=${config.smtp.enabled} \\
-  -e SMTP_HOST=${config.smtp.host} \\
-  -e SMTP_PORT=${config.smtp.port} \\
-  -e SMTP_USER=${config.smtp.user} \\
+  -v '${config.config_path}':/config:ro \\
+  -v '${config.dump_path}':/backups \\
+  -e RETENTION_DAYS='${config.retention_days}' \\
+  -e TZ='${config.timezone}' \\
+  -e ENABLE_EMAIL='${config.smtp.enabled}' \\
+  -e SMTP_HOST='${config.smtp.host}' \\
+  -e SMTP_PORT='${config.smtp.port}' \\
+  -e SMTP_USER='${config.smtp.user}' \\
   -e SMTP_PASS='${config.smtp.pass}' \\
-  -e SMTP_FROM=${config.smtp.from} \\
-  -e SMTP_TO=${config.smtp.to} \\
-  -e SMTP_TLS=${config.smtp.tls} \\
+  -e SMTP_FROM='${config.smtp.from}' \\
+  -e SMTP_TO='${config.smtp.to}' \\
+  -e SMTP_TLS='${config.smtp.tls}' \\
   -e SERVER_NAME='${config.server_display_name}' \\
   -e JOB_NAME='${config.job_name}' \\
-  -e TELEGRAM_ENABLED=${config.telegram?.enabled ?? 'false'} \\
-  -e TELEGRAM_TOKEN=${config.telegram?.token ?? ''} \\
-  -e TELEGRAM_CHAT_ID=${config.telegram?.chat_id ?? ''} \\
-  -e NTFY_ENABLED=${config.ntfy?.enabled ?? 'false'} \\
-  -e NTFY_URL=${config.ntfy?.url ?? ''} \\
-  -e NTFY_TOPIC=${config.ntfy?.topic ?? ''} \\
-  -e NOTIFY_ATTACH_LOG=${config.notify?.attach_log ?? 'false'} \\
+  -e TELEGRAM_ENABLED='${config.telegram?.enabled ?? 'false'}' \\
+  -e TELEGRAM_TOKEN='${config.telegram?.token ?? ''}' \\
+  -e TELEGRAM_CHAT_ID='${config.telegram?.chat_id ?? ''}' \\
+  -e NTFY_ENABLED='${config.ntfy?.enabled ?? 'false'}' \\
+  -e NTFY_URL='${config.ntfy?.url ?? ''}' \\
+  -e NTFY_TOPIC='${config.ntfy?.topic ?? ''}' \\
+  -e NOTIFY_ATTACH_LOG='${config.notify?.attach_log ?? 'false'}' \\
   --entrypoint sleep ${config.image} infinity
 
 echo "[KDD] Connecting extra networks..."
@@ -131,7 +133,11 @@ docker exec ${containerName} /app/backup.sh
             }
         );
 
+        const deadline = Date.now() + timeoutMs;
         while (!executionFinished) {
+            if (Date.now() > deadline) {
+                throw new Error(`Backup timed out after ${config.timeout_seconds ?? 3600}s`);
+            }
             await new Promise(r => setTimeout(r, 500));
         }
 

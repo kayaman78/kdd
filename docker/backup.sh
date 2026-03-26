@@ -121,7 +121,8 @@ _check_size_drop() {
                 local prev_h curr_h
                 prev_h=$(du -h "$prev_backup" | cut -f1)
                 curr_h=$(du -h "$gz_file" | cut -f1)
-                echo "WARN:size drop ${prev_h}→${curr_h}"
+                # Only return 1 — callers capture stdout separately via $()
+                printf 'WARN:size drop %s→%s' "$prev_h" "$curr_h"
                 return 1
             fi
         fi
@@ -145,11 +146,11 @@ verify_mysql_backup() {
         echo "FAIL:dump incomplete (missing completion marker)"; return 1
     fi
 
-    # Size drop
-    local size_result
-    if ! _check_size_drop "$gz_file" "$target_dir" "dump-*.sql.gz"; then
-        size_result=$(echo "WARN")
-        echo "WARN:size drop detected"
+    # Size drop — capture stdout so _check_size_drop message is relayed cleanly
+    local size_msg
+    size_msg=$(_check_size_drop "$gz_file" "$target_dir" "dump-*.sql.gz")
+    if [ $? -ne 0 ]; then
+        echo "$size_msg"
         return 0
     fi
 
@@ -170,8 +171,10 @@ verify_postgres_backup() {
         echo "FAIL:dump incomplete (missing completion marker)"; return 1
     fi
 
-    if ! _check_size_drop "$gz_file" "$target_dir" "dump-*.sql.gz"; then
-        echo "WARN:size drop detected"
+    local size_msg
+    size_msg=$(_check_size_drop "$gz_file" "$target_dir" "dump-*.sql.gz")
+    if [ $? -ne 0 ]; then
+        echo "$size_msg"
         return 0
     fi
 
@@ -191,8 +194,10 @@ verify_mongo_backup() {
         echo "FAIL:empty archive"; return 1
     fi
 
-    if ! _check_size_drop "$gz_file" "$target_dir" "dump-*.archive.gz"; then
-        echo "WARN:size drop detected"
+    local size_msg
+    size_msg=$(_check_size_drop "$gz_file" "$target_dir" "dump-*.archive.gz")
+    if [ $? -ne 0 ]; then
+        echo "$size_msg"
         return 0
     fi
 
@@ -205,11 +210,19 @@ verify_mongo_backup() {
 
 configure_msmtp() {
     local config="/tmp/.msmtprc"
+
+    # Port 465 = SMTPS (immediate SSL) → tls_starttls off
+    # Port 587/25 = STARTTLS → tls_starttls on
+    # SMTP_TLS=off = no TLS → tls_starttls off
+    local starttls="on"
+    [ "$SMTP_PORT" = "465" ] && starttls="off"
+    [ "$SMTP_TLS"  = "off" ] && starttls="off"
+
     cat > "$config" <<EOF
 defaults
 auth $([ -n "$SMTP_USER" ] && echo "on" || echo "off")
 tls $SMTP_TLS
-tls_starttls on
+tls_starttls $starttls
 tls_trust_file /etc/ssl/certs/ca-certificates.crt
 logfile /tmp/msmtp.log
 
@@ -431,7 +444,7 @@ send_ntfy() {
 
 rotate_backups() {
     local target="$1"
-    find "$target" -type f -mtime +${RETENTION_DAYS} -delete 2>/dev/null || true
+    find "$target" -type f -mtime +"$((RETENTION_DAYS - 1))" -delete 2>/dev/null || true
 }
 
 _do_verify() {
