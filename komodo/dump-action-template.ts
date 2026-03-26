@@ -17,6 +17,7 @@
  *   job_name             - Label shown in email header
  *   image                - KDD image to use (e.g. "ghcr.io/kayaman78/kdd:latest")
  *   timeout_seconds      - Max seconds to wait for the backup to complete (default: 3600)
+ *   dry_run              - "true" to scan without writing any backups or touching files (default: "false")
  *   smtp.enabled         - "true" | "false"
  *   smtp.host            - SMTP server address
  *   smtp.port            - SMTP port
@@ -97,6 +98,7 @@ docker run -d \\
   -e NTFY_URL='${config.ntfy?.url ?? ''}' \\
   -e NTFY_TOPIC='${config.ntfy?.topic ?? ''}' \\
   -e NOTIFY_ATTACH_LOG='${config.notify?.attach_log ?? 'false'}' \\
+  -e DRY_RUN='${config.dry_run ?? 'false'}' \\
   --entrypoint sleep ${config.image} infinity
 
 echo "[KDD] Connecting extra networks..."

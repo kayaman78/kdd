@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.1.0 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 1.2.0 | **Maintained**: Yes
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -116,6 +116,7 @@ Add this JSON to your Action's configuration field or use always updated [argume
   "dump_path": "/data/stacks/production/kdd/dump",
   "retention_days": "14",
   "timeout_seconds": 3600,
+  "dry_run": "false",
   "timezone": "Europe/Rome",
   "server_display_name": "prod-server-01",
   "job_name": "Backup Report",
@@ -224,6 +225,7 @@ Set `notify.attach_log: "true"` to attach the current day's log file to both Tel
 | `ntfy.url` | ntfy server URL | - |
 | `ntfy.topic` | ntfy topic | - |
 | `notify.attach_log` | Attach log to push notifications | `false` |
+| `dry_run` | `"true"` = scan without writing any backups or touching files | `"false"` |
 
 ---
 
@@ -335,6 +337,11 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 ---
 
 ## Changelog
+
+### v1.2.0
+- Added `dry_run` parameter — set `"true"` to scan all configured databases and report what would be backed up without writing any files or touching retention; email subject shows `[🔍 DRY-RUN]`, push notifications include a dry-run summary, log shows a retention preview of what would be removed
+- Dry-run shows per-database rows in the HTML report with a 🔍 indicator and "skipped" verify status
+- Dry-run does not modify any files: no archives written, no retention deletions, no log cleanup
 
 ### v1.1.0
 - Fixed backup verification double-output bug — `_check_size_drop` was writing to stdout directly while callers also wrote their own message, producing two lines in `verify_result` and garbled HTML report entries; callers now capture `_check_size_drop` output via `$()` and relay it cleanly

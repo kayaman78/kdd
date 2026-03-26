@@ -55,6 +55,8 @@ NTFY_TOPIC=${NTFY_TOPIC:-}
 # Attach log to push notifications
 NOTIFY_ATTACH_LOG=${NOTIFY_ATTACH_LOG:-false}
 
+DRY_RUN=${DRY_RUN:-false}
+
 NETWORK_FILTER=""
 
 while [[ $# -gt 0 ]]; do
@@ -240,13 +242,26 @@ EOF
 generate_html_report() {
     local total="$1"
     local failed="$2"
+    local dry_run="${3:-false}"
+    local retention_preview="${4:-}"
     local success=$((total - failed))
     local status_color="#28a745"
     local status_text="SUCCESS"
 
-    if [ $failed -gt 0 ]; then
+    if [ "$dry_run" = "true" ]; then
+        status_color="#6c757d"
+        status_text="DRY-RUN"
+    elif [ $failed -gt 0 ]; then
         [ $success -eq 0 ] && status_color="#dc3545" && status_text="FAILED"
         [ $success -gt 0 ] && status_color="#ffc107" && status_text="PARTIAL"
+    fi
+
+    local summary_line
+    if [ "$dry_run" = "true" ]; then
+        summary_line="Mode: <b>DRY-RUN</b> — <b>${total}</b> database(s) found. No backups written, no filesystem changes."
+        [ -n "$retention_preview" ] && summary_line+="<br>${retention_preview}"
+    else
+        summary_line="Total: ${total} | Success: ${success} | Failed: ${failed}"
     fi
 
     cat <<EOF
@@ -269,7 +284,7 @@ td{padding:8px;border:1px solid #ddd}
 <div class="status"><h2>${status_text}</h2></div>
 <div class="summary">
 <h3>Summary</h3>
-<p>Total: ${total} | Success: ${success} | Failed: ${failed}</p>
+<p>${summary_line}</p>
 <p>Retention: ${RETENTION_DAYS} days | Timestamp: ${TIMESTAMP}</p>
 </div>
 <table>
@@ -297,7 +312,8 @@ add_db_to_report() {
     local verify_color="#d4edda" verify_icon="✅"
     local verify_label="$verify_status"
 
-    [ "$backup_status" = "failed" ] && backup_color="#f8d7da" && backup_icon="❌"
+    [ "$backup_status" = "failed"  ] && backup_color="#f8d7da" && backup_icon="❌"
+    [ "$backup_status" = "dry-run" ] && backup_color="#e2e3e5" && backup_icon="🔍"
 
     case "${verify_status%%:*}" in
         OK)      verify_color="#d4edda"; verify_icon="✅" ;;
@@ -362,6 +378,12 @@ send_email() {
 # -----------------------------------------------------------------------------
 
 build_text_summary() {
+    if [ "$DRY_RUN" = "true" ]; then
+        printf "🔍 KDD DRY-RUN — %s | %s\n%d database(s) found. No backups written." \
+            "$SERVER_NAME" "$TIMESTAMP" "$dry_run_count"
+        return
+    fi
+
     local icon="✅"
     [ $failed_backups -gt 0 ] && icon="❌"
     [ $failed_backups -eq 0 ] && [ $verify_warn -gt 0 ] && icon="⚠️"
@@ -468,6 +490,7 @@ _do_verify() {
 init_log
 
 log "🚀 KDD - Starting backup"
+[ "$DRY_RUN" = "true" ] && log "🔍 DRY-RUN mode — no backups will be written, no filesystem changes"
 log "⚙️  Retention: $RETENTION_DAYS days | Size drop warn threshold: ${SIZE_DROP_WARN}%"
 [ -n "$NETWORK_FILTER" ] && log "🌐 Network filter: $NETWORK_FILTER"
 
@@ -477,6 +500,7 @@ mkdir -p "$BACKUPS_DIR"
 
 total_backups=0
 failed_backups=0
+dry_run_count=0
 verify_ok=0
 verify_warn=0
 verify_err=0
@@ -506,6 +530,13 @@ if [ "$mysql_count" -gt 0 ]; then
 
         if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
             log "  ⏭️  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            continue
+        fi
+
+        if [ "$DRY_RUN" = "true" ]; then
+            log "  🔍 [DRY-RUN] Would backup: $name (MySQL)"
+            ((dry_run_count++))
+            backup_details+=$(add_db_to_report "$name" "MySQL" "dry-run" "—" "skipped")
             continue
         fi
 
@@ -565,6 +596,13 @@ if [ "$pg_count" -gt 0 ]; then
 
         if [ -n "$NETWORK_FILTER" ] && [ "$network" != "$NETWORK_FILTER" ]; then
             log "  ⏭️  Skipping $name (network: $network, filter: $NETWORK_FILTER)"
+            continue
+        fi
+
+        if [ "$DRY_RUN" = "true" ]; then
+            log "  🔍 [DRY-RUN] Would backup: $name (PostgreSQL)"
+            ((dry_run_count++))
+            backup_details+=$(add_db_to_report "$name" "PostgreSQL" "dry-run" "—" "skipped")
             continue
         fi
 
@@ -631,6 +669,13 @@ if [ "$mongo_count" -gt 0 ]; then
             continue
         fi
 
+        if [ "$DRY_RUN" = "true" ]; then
+            log "  🔍 [DRY-RUN] Would backup: $name (MongoDB)"
+            ((dry_run_count++))
+            backup_details+=$(add_db_to_report "$name" "MongoDB" "dry-run" "—" "skipped")
+            continue
+        fi
+
         target="$BACKUPS_DIR/$name"
         mkdir -p "$target"
         filepath="$target/dump-${TIMESTAMP}.archive.gz"
@@ -671,16 +716,44 @@ fi
 # LOG RETENTION — same policy as backups
 # -----------------------------------------------------------------------------
 
-log "🧹 Removing logs older than $RETENTION_DAYS days..."
 DELETED_LOGS=0
-while IFS= read -r -d '' old_log; do
-    rm -f "$old_log"
-    ((DELETED_LOGS++))
-done < <(
-    find "$LOG_DIR" -type f -name "backup_*.log" \
-        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null
-)
-log "🧹 Removed $DELETED_LOGS log(s)."
+if [ "$DRY_RUN" = "true" ]; then
+    log "🔍 [DRY-RUN] Log retention preview (would remove logs older than $RETENTION_DAYS days):"
+    while IFS= read -r -d '' old_log; do
+        log "    [DRY-RUN] Would remove: $old_log"
+        ((DELETED_LOGS++))
+    done < <(find "$LOG_DIR" -type f -name "backup_*.log" \
+        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
+    [ $DELETED_LOGS -gt 0 ] \
+        && log "    Would remove $DELETED_LOGS log(s) (dry-run)." \
+        || log "    No logs to remove."
+else
+    log "🧹 Removing logs older than $RETENTION_DAYS days..."
+    while IFS= read -r -d '' old_log; do
+        rm -f "$old_log"
+        ((DELETED_LOGS++))
+    done < <(find "$LOG_DIR" -type f -name "backup_*.log" \
+        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
+    log "🧹 Removed $DELETED_LOGS log(s)."
+fi
+
+# -----------------------------------------------------------------------------
+# BACKUP RETENTION PREVIEW (dry-run only)
+# -----------------------------------------------------------------------------
+
+DELETED_COUNT=0
+if [ "$DRY_RUN" = "true" ]; then
+    log "🔍 [DRY-RUN] Backup retention preview (would remove files older than $RETENTION_DAYS days):"
+    while IFS= read -r -d '' old_file; do
+        log "    [DRY-RUN] Would remove: $old_file"
+        ((DELETED_COUNT++))
+    done < <(find "$BACKUPS_DIR" -type f \
+        \( -name "dump-*.sql.gz" -o -name "dump-*.archive.gz" \) \
+        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
+    [ $DELETED_COUNT -gt 0 ] \
+        && log "    Would remove $DELETED_COUNT backup file(s) (dry-run)." \
+        || log "    No backup files to remove."
+fi
 
 # -----------------------------------------------------------------------------
 # SUMMARY
@@ -688,22 +761,36 @@ log "🧹 Removed $DELETED_LOGS log(s)."
 
 total=$((total_backups + failed_backups))
 
-log "✅ Backup completed — Success: $total_backups | Failed: $failed_backups"
-log "🔍 Verify — OK: $verify_ok | Warn: $verify_warn | Fail: $verify_err"
+if [ "$DRY_RUN" = "true" ]; then
+    log "🔍 [DRY-RUN] Scan completed — $dry_run_count database(s) found. No backups written."
+else
+    log "✅ Backup completed — Success: $total_backups | Failed: $failed_backups"
+    log "🔍 Verify — OK: $verify_ok | Warn: $verify_warn | Fail: $verify_err"
+fi
 
 if [ "$ENABLE_EMAIL" = "true" ]; then
-    html_report=$(generate_html_report "$total" "$failed_backups")
-    html_report+="$backup_details"
-    html_report+=$(close_html_report "$verify_ok" "$verify_warn" "$verify_err")
-
-    if [ $failed_backups -eq 0 ] && [ $verify_err -eq 0 ] && [ $verify_warn -eq 0 ]; then
-        subject="[✅ SUCCESS] ${SERVER_NAME} Backup - $TIMESTAMP"
-    elif [ $failed_backups -eq 0 ] && [ $verify_err -eq 0 ] && [ $verify_warn -gt 0 ]; then
-        subject="[⚠️ WARN] ${SERVER_NAME} Backup - $TIMESTAMP"
-    elif [ $total_backups -eq 0 ]; then
-        subject="[❌ FAILED] ${SERVER_NAME} Backup - $TIMESTAMP"
+    if [ "$DRY_RUN" = "true" ]; then
+        local_preview=""
+        { [ "${DELETED_COUNT:-0}" -gt 0 ] || [ "${DELETED_LOGS:-0}" -gt 0 ]; } && \
+            local_preview="Retention preview: <b>${DELETED_COUNT:-0}</b> backup file(s) and <b>${DELETED_LOGS:-0}</b> log(s) would be removed."
+        html_report=$(generate_html_report "$dry_run_count" "0" "true" "$local_preview")
+        html_report+="$backup_details"
+        html_report+=$(close_html_report "0" "0" "0")
+        subject="[🔍 DRY-RUN] ${SERVER_NAME} Backup - $TIMESTAMP"
     else
-        subject="[⚠️ PARTIAL] ${SERVER_NAME} Backup - $TIMESTAMP"
+        html_report=$(generate_html_report "$total" "$failed_backups")
+        html_report+="$backup_details"
+        html_report+=$(close_html_report "$verify_ok" "$verify_warn" "$verify_err")
+
+        if [ $failed_backups -eq 0 ] && [ $verify_err -eq 0 ] && [ $verify_warn -eq 0 ]; then
+            subject="[✅ SUCCESS] ${SERVER_NAME} Backup - $TIMESTAMP"
+        elif [ $failed_backups -eq 0 ] && [ $verify_err -eq 0 ] && [ $verify_warn -gt 0 ]; then
+            subject="[⚠️ WARN] ${SERVER_NAME} Backup - $TIMESTAMP"
+        elif [ $total_backups -eq 0 ]; then
+            subject="[❌ FAILED] ${SERVER_NAME} Backup - $TIMESTAMP"
+        else
+            subject="[⚠️ PARTIAL] ${SERVER_NAME} Backup - $TIMESTAMP"
+        fi
     fi
 
     send_email "$subject" "$html_report"
