@@ -292,6 +292,48 @@ docker build -t kdd:latest ./docker/
 
 ---
 
+## Updating
+
+In Komodo, the **Script** field (TypeScript code) and the **Args** field (your JSON configuration) are stored separately. Updating KDD never touches your parameters — networks, paths, SMTP, Telegram, ntfy are all safe.
+
+### Update the Action Script
+
+**1. Open the Action in Komodo**
+
+Go to Actions → select your KDD Action.
+
+**2. Replace the Script field only**
+
+Paste the new content of [`dump-action-template.ts`](komodo/dump-action-template.ts) into the Script field. Your Args JSON is in a separate field and is untouched.
+
+**3. Save**
+
+Done. No server changes, no re-entering parameters.
+
+---
+
+### Multiple servers
+
+If you have one KDD Action per server (the standard setup), repeat the Script paste for each one. Since the code is identical across all actions and only the Args differ, this is a straightforward copy-paste for each action.
+
+> **Tip**: Update and test one action first. Once confirmed working, copy the Script field content into all remaining actions — parameters stay exactly as you configured them.
+
+---
+
+### Update the KDD image
+
+If `backup.sh` changed (visible in the [Changelog](#changelog)), you need a new image. Pull it on the server or let the Action do it automatically — the `docker pull` at the start of each run always fetches the latest tag if you use `ghcr.io/kayaman78/kdd:latest`.
+
+No manual image update is needed if you use the `:latest` tag.
+
+---
+
+### Check what changed before updating
+
+The [Changelog](#changelog) documents every change per version. If a release only touches the Komodo Action TypeScript, you only need to update the Script field. If it also touches `backup.sh`, the image rebuild handles that automatically on the next pull.
+
+---
+
 ## Changelog
 
 ### v1.1.0
