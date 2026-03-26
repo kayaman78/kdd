@@ -97,57 +97,13 @@ docker run --rm -it \
 
 See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
 
-### 2. Create Komodo Action
+### 2. Import the Action Template
 
-In Komodo go to **Actions → New Action**, paste the content of [dump-action-template.ts](komodo/dump-action-template.ts) into the Script field, and save.
+In Komodo go to **Resource Sync → New Resource Sync**, paste the content of [kdd-action-template.toml](komodo/kdd-action-template.toml), and execute the sync. The Action template is created automatically with the TypeScript code and default parameters already in place.
 
-> Always use the file from the repo — it stays in sync with new features and parameters.
+Open the imported Action, go to the **Args** field, and fill in your values (server, paths, networks, notifications). See [Configuration Parameters](#configuration-parameters) for the full reference.
 
-### 3. Configure Action Parameters
-
-Add this JSON to your Action's configuration field or use always updated [arguments template](komodo/arguments-template.json):
-
-```json
-{
-  "server_name": "prod-server-01",
-  "runner_network": "bridge-01",
-  "backup_networks": ["bridge-01", "bridge-02"],
-  "config_path": "/data/stacks/production/kdd/config",
-  "dump_path": "/data/stacks/production/kdd/dump",
-  "retention_days": "14",
-  "timeout_seconds": 3600,
-  "dry_run": "false",
-  "timezone": "Europe/Rome",
-  "server_display_name": "prod-server-01",
-  "job_name": "Backup Report",
-  "image": "ghcr.io/kayaman78/kdd:latest",
-  "smtp": {
-    "enabled": "false",
-    "host": "smtp.example.com",
-    "port": "587",
-    "user": "",
-    "pass": "",
-    "from": "kdd@example.com",
-    "to": "admin@example.com",
-    "tls": "auto"
-  },
-  "telegram": {
-    "enabled": "false",
-    "token": "123456:ABC-your-bot-token",
-    "chat_id": "-1001234567890"
-  },
-  "ntfy": {
-    "enabled": "false",
-    "url": "https://ntfy.sh",
-    "topic": "kdd-backups"
-  },
-  "notify": {
-    "attach_log": "false"
-  }
-}
-```
-
-### 4. Schedule Backups
+### 3. Schedule Backups
 
 Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups.
 

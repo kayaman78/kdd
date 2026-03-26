@@ -13,8 +13,9 @@ kdd/
 │   ├── backup.sh               # Script backup principale
 │   └── SETUP.md                # Guida setup dettagliata
 ├── komodo/
-│   ├── dump-action-template.ts # Action TypeScript per Komodo
-│   └── arguments-template.json # Parametri esempio per la Action
+│   ├── dump-action-template.ts  # Action TypeScript per Komodo (source)
+│   ├── arguments-template.json  # Parametri esempio per la Action
+│   └── kdd-action-template.toml # Export Komodo Resource Sync — importa direttamente in Komodo
 └── README.md
 ```
 
