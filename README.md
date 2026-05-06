@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 1.2.0 | **Maintained**: Yes
+**Project Status**: Active development | **Latest Version**: 2.0.0 | **Maintained**: Yes | **Requires**: Komodo v2
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
@@ -293,6 +293,14 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 ---
 
 ## Changelog
+
+### v2.0.0 — Komodo v2 migration (breaking)
+- **Requires Komodo v2.** Migrated from `komodo.execute_terminal` (v1) to `komodo.execute_server_terminal` (v2 unified API).
+- Terminal initialization is now inline: `init: { command: "bash", recreate: Always }` is passed alongside the docker command in a single call, replacing the previous separate `CreateTerminal` step.
+- Cleanup pattern preserved: `execute_server_terminal("exit 0")` → 500ms grace period → `DeleteTerminal`. The cleanup call deliberately omits `init` — the terminal already exists from the run above and we don't want to spawn a new shell just to delete it.
+- Documented KDD's **single-instance-per-server design constraint**: both `containerName` and `terminalName` are hardcoded; concurrent KDD actions on the same server are not supported (would collide on the Docker container `--name` first). Defensive recreate (`recreate: Always` + `docker rm -f` in `trap EXIT`) handles residuals from previously killed/timed-out runs. If multi-action concurrency is needed in the future, both names must be made unique per-action (e.g. suffix with `runner_network`).
+- No changes to user-facing parameters: `server_name`, `runner_network`, `backup_networks`, `config_path`, `dump_path`, retention, timezone, SMTP/Telegram/ntfy/notify configs all work exactly as before.
+- No changes to the KDD container image (`backup.sh`, `setup.sh`, `entrypoint.sh`, `Dockerfile` untouched).
 
 ### v1.2.0
 - Added `dry_run` parameter — set `"true"` to scan all configured databases and report what would be backed up without writing any files or touching retention; email subject shows `[🔍 DRY-RUN]`, push notifications include a dry-run summary, log shows a retention preview of what would be removed

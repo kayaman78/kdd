@@ -25,16 +25,19 @@ kdd/
 - **Tools:** `docker-ce-cli`, `yq` v4.40.5, `jq`, `msmtp`, `curl`, `gzip`
 - **Image pubblicata:** `ghcr.io/kayaman78/kdd:latest`
 
-## Flusso Komodo Action
-1. Action TypeScript avvia `docker pull` + `docker run -d --entrypoint sleep infinity`
-2. Connette il container a tutti i `backup_networks` via `docker network connect`
-3. `docker exec` esegue `backup.sh` nel container
-4. `trap EXIT` nel bash script rimuove il container al termine
-5. Cleanup terminal nel `finally` block: `exit 0` → 500ms → `DeleteTerminal`
+## Flusso Komodo Action (v2 API)
+1. Action TypeScript apre il terminal e lancia `dockerCommand` in una sola call: `execute_server_terminal` con `init: { command: "bash", recreate: Always }`
+2. `dockerCommand` esegue `docker pull` + `docker run -d --entrypoint sleep infinity` + `docker network connect` per ogni `backup_networks` extra + `docker exec backup.sh`
+3. `trap EXIT` nel bash script rimuove il container al termine (sempre, anche su errore/timeout)
+4. Cleanup terminal nel `finally` block: `execute_server_terminal("exit 0")` (no `init`) → 500ms → `DeleteTerminal`
 
 ## Terminal lifecycle KDD — CRITICO
-Il `finally` block usa `execute_terminal("exit 0")` + attesa 500ms + `DeleteTerminal`.
-**Non modificare questa sequenza** — è il meccanismo che garantisce la chiusura del terminal Komodo.
+Il `finally` block usa `execute_server_terminal("exit 0")` + attesa 500ms + `DeleteTerminal`.
+**Non modificare questa sequenza** — è il meccanismo che garantisce la chiusura del terminal Komodo dopo `dockerCommand` (che esce con `set -e + trap` in stato non sempre deterministico).
+**Importante**: nel cleanup `execute_server_terminal` NON passa `init` — il terminal esiste già dalla call principale; passare `init: { recreate: Always }` qui spawnerebbe una nuova shell solo per cancellarla, sprecando un round-trip.
+
+## Single-instance-per-server design (consapevole)
+Sia `containerName = "kdd-backup-runner"` sia `terminalName = "kdd-backup-temp"` sono **hardcoded by design**. Conseguenza: due action KDD lanciate concorrentemente sullo stesso server collidono (sul container Docker prima ancora che sul terminal Komodo, perché il `--name` di `docker run` deve essere unico). Non è un bug — KDD è pensato per girare una volta per server schedulato (backup notturno, hourly, etc.), non in parallelo. Il pattern difensivo è: `recreate: Always` sul terminal + `docker rm -f` nel `trap EXIT` del bash script — entrambi nukeano residui da run precedenti killed/timeout. Se serve concurrency multi-action (es. backup parallelo per network diversa sullo stesso server), prima va resa unica `containerName` (es. `kdd-backup-runner-${runner_network}`) e di conseguenza `terminalName`. Per ora: una action KDD per (server, network), schedulate sequenzialmente in una Komodo Procedure.
 
 ## Setup wizard
 ```bash

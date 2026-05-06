@@ -117,19 +117,17 @@ docker exec ${containerName} /app/backup.sh
     let executionFinished = false;
 
     try {
-        await komodo.write("CreateTerminal", {
-            server: config.server_name,
-            name: terminalName,
-            command: "bash",
-            recreate: Types.TerminalRecreateMode.Always,
-        });
-        console.log("✅ Terminal created.");
-
-        await komodo.execute_terminal(
+        // Komodo v2 unified API: terminal init + command in a single call.
+        // `init` opens the terminal with bash, then `command` runs the docker workflow.
+        await komodo.execute_server_terminal(
             {
                 server: config.server_name,
                 terminal: terminalName,
                 command: dockerCommand,
+                init: {
+                    command: "bash",
+                    recreate: Types.TerminalRecreateMode.Always,
+                },
             },
             {
                 onLine: (line: string) => console.log(`[KDD] ${line}`),
@@ -159,9 +157,14 @@ docker exec ${containerName} /app/backup.sh
         throw err;
 
     } finally {
+        // Cleanup pattern: graceful shell exit → 500ms grace period → DeleteTerminal.
+        // This three-step sequence prevents stale terminals from accumulating in the
+        // Komodo UI when the docker workflow above ends in a non-deterministic state.
+        // Do NOT pass `init` here — the terminal already exists from the run above
+        // (passing init with recreate:Always would spawn a new shell only to delete it).
         console.log("🧹 Cleaning up terminal resources...");
         try {
-            await komodo.execute_terminal(
+            await komodo.execute_server_terminal(
                 {
                     server: config.server_name,
                     terminal: terminalName,
