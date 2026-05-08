@@ -161,7 +161,7 @@ Set `notify.attach_log: "true"` to attach the current day's log file to both Tel
 | `config_path` | Host path to the KDD config directory | required |
 | `dump_path` | Host path to the backup output directory | required |
 | `image` | KDD Docker image to use | `ghcr.io/kayaman78/kdd:latest` |
-| `retention_days` | Days to keep backups | `7` |
+| `retention_days` | Number of most recent dumps to keep per database | `7` |
 | `timeout_seconds` | Max seconds to wait for the backup before raising a timeout error | `3600` |
 | `timezone` | Container timezone | `Europe/Rome` |
 | `server_display_name` | Name in notifications | `KDD` |
@@ -191,7 +191,7 @@ Set `notify.attach_log: "true"` to attach the current day's log file to both Tel
 2. **Execution**: Komodo Action triggers `backup.sh` with network filter
 3. **Backup**: Creates compressed dumps of all databases on specified network
 4. **Verification**: Checks gzip integrity, dump completion marker, and size trend
-5. **Rotation**: Removes backups and logs older than retention period
+5. **Rotation**: Keeps the N most recent dumps per database (and logs); older ones removed only when replaced
 6. **Notification**: Sends email report, Telegram message, and/or ntfy alert — each independently
 
 ---
@@ -293,6 +293,12 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 ---
 
 ## Changelog
+
+### v2.0.1 — Action cleanup hang fix + retention semantic fix
+- **Action cleanup**: `finally` block in `dump-action-template.ts` ora esegue solo `DeleteTerminal`, allineato al pattern KCR. Il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) ereditato in v2.0.0 causava hang del finally quando la shell del `dockerCommand` era già exited (set -e + trap EXIT path): la promise SDK restava pendente all'infinito, con l'action che appariva "running" fino a riavvio container Komodo. In Komodo v2 `DeleteTerminal` da solo basta — il SDK termina la shell e libera risorse internamente.
+- **Retention semantic** (`backup.sh`): cambiata da calendar-based (`find -mtime +N -delete`) a N-most-recent. `RETENTION_DAYS` ora significa "mantieni gli ultimi N dump per database" indipendentemente dal calendario. Caso d'uso protetto: backup pausato per >N giorni — alla prima nuova copia gli archivi precedenti sopravvivono finché non vengono rimpiazzati uno-a-uno. Stessa policy applicata a logs (`backup_*.log`). Helper `_files_to_rotate()` centralizza la logica usata da rotate_backups + log retention + dry-run preview.
+- No breaking change a parametri/env vars: `RETENTION_DAYS=7` continua a esistere e funzionare; cambia solo la semantica (count anziché days). Per backup giornalieri tipici l'effetto pratico è identico.
+- No changes al container image — il fix retention è in `backup.sh` ma è incluso in `ghcr.io/kayaman78/kdd:latest` rebuild.
 
 ### v2.0.0 — Komodo v2 migration (breaking)
 - **Requires Komodo v2.** Migrated from `komodo.execute_terminal` (v1) to `komodo.execute_server_terminal` (v2 unified API).

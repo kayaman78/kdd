@@ -6,7 +6,7 @@
 # Supports: MySQL/MariaDB, PostgreSQL, MongoDB
 #
 # Configuration via environment variables:
-#   RETENTION_DAYS   - Backup retention (default: 7)
+#   RETENTION_DAYS   - Number of most recent dumps to keep per database (default: 7)
 #   SIZE_DROP_WARN   - % size drop vs previous backup that triggers a warning (default: 20)
 #   ENABLE_EMAIL     - Send email report (default: false)
 #   SMTP_HOST        - SMTP server
@@ -285,7 +285,7 @@ td{padding:8px;border:1px solid #ddd}
 <div class="summary">
 <h3>Summary</h3>
 <p>${summary_line}</p>
-<p>Retention: ${RETENTION_DAYS} days | Timestamp: ${TIMESTAMP}</p>
+<p>Retention: ${RETENTION_DAYS} most recent dumps per database | Timestamp: ${TIMESTAMP}</p>
 </div>
 <table>
 <thead>
@@ -464,9 +464,32 @@ send_ntfy() {
 # HELPERS
 # -----------------------------------------------------------------------------
 
+# Lists files in $1 matching $2 that are BEYOND the RETENTION_DAYS most recent
+# (i.e. the deletion candidates). Calendar-independent: protects against
+# mass-delete when backups have been paused for longer than RETENTION_DAYS.
+# Output: one path per line (filenames have no newlines by construction).
+_files_to_rotate() {
+    local target="$1"
+    local pattern="$2"
+    [ -d "$target" ] || return 0
+    find "$target" -maxdepth 1 -type f -name "$pattern" -printf '%T@\t%p\n' 2>/dev/null \
+        | sort -rn \
+        | tail -n +$((RETENTION_DAYS + 1)) \
+        | cut -f2-
+}
+
 rotate_backups() {
     local target="$1"
-    find "$target" -type f -mtime +"$((RETENTION_DAYS - 1))" -delete 2>/dev/null || true
+    [ -d "$target" ] || return 0
+    # Retention: keep the RETENTION_DAYS most recent dumps in $target.
+    # Older ones are deleted only when newer ones replace them — if backups
+    # stop for a long pause, the existing archives survive intact.
+    local candidates
+    candidates=$(_files_to_rotate "$target" "dump-*.gz")
+    [ -z "$candidates" ] && return 0
+    while IFS= read -r f; do
+        rm -f -- "$f"
+    done <<< "$candidates"
 }
 
 _do_verify() {
@@ -491,7 +514,7 @@ init_log
 
 log "🚀 KDD - Starting backup"
 [ "$DRY_RUN" = "true" ] && log "🔍 DRY-RUN mode — no backups will be written, no filesystem changes"
-log "⚙️  Retention: $RETENTION_DAYS days | Size drop warn threshold: ${SIZE_DROP_WARN}%"
+log "⚙️  Retention: $RETENTION_DAYS most recent dumps per database | Size drop warn threshold: ${SIZE_DROP_WARN}%"
 [ -n "$NETWORK_FILTER" ] && log "🌐 Network filter: $NETWORK_FILTER"
 
 [ ! -f "$CONFIG" ] && log_error "config.yaml not found" && exit 1
@@ -717,24 +740,27 @@ fi
 # -----------------------------------------------------------------------------
 
 DELETED_LOGS=0
+log_candidates=$(_files_to_rotate "$LOG_DIR" "backup_*.log")
 if [ "$DRY_RUN" = "true" ]; then
-    log "🔍 [DRY-RUN] Log retention preview (would remove logs older than $RETENTION_DAYS days):"
-    while IFS= read -r -d '' old_log; do
-        log "    [DRY-RUN] Would remove: $old_log"
-        ((DELETED_LOGS++))
-    done < <(find "$LOG_DIR" -type f -name "backup_*.log" \
-        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
-    [ $DELETED_LOGS -gt 0 ] \
-        && log "    Would remove $DELETED_LOGS log(s) (dry-run)." \
-        || log "    No logs to remove."
+    if [ -n "$log_candidates" ]; then
+        log "🔍 [DRY-RUN] Log retention preview (would remove logs beyond the $RETENTION_DAYS most recent):"
+        while IFS= read -r old_log; do
+            log "    [DRY-RUN] Would remove: $old_log"
+            ((DELETED_LOGS++))
+        done <<< "$log_candidates"
+        log "    Would remove $DELETED_LOGS log(s) (dry-run)."
+    else
+        log "    No logs to remove."
+    fi
 else
-    log "🧹 Removing logs older than $RETENTION_DAYS days..."
-    while IFS= read -r -d '' old_log; do
-        rm -f "$old_log"
-        ((DELETED_LOGS++))
-    done < <(find "$LOG_DIR" -type f -name "backup_*.log" \
-        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
-    log "🧹 Removed $DELETED_LOGS log(s)."
+    if [ -n "$log_candidates" ]; then
+        log "🧹 Removing logs beyond the $RETENTION_DAYS most recent..."
+        while IFS= read -r old_log; do
+            rm -f -- "$old_log"
+            ((DELETED_LOGS++))
+        done <<< "$log_candidates"
+        log "🧹 Removed $DELETED_LOGS log(s)."
+    fi
 fi
 
 # -----------------------------------------------------------------------------
@@ -743,13 +769,16 @@ fi
 
 DELETED_COUNT=0
 if [ "$DRY_RUN" = "true" ]; then
-    log "🔍 [DRY-RUN] Backup retention preview (would remove files older than $RETENTION_DAYS days):"
-    while IFS= read -r -d '' old_file; do
-        log "    [DRY-RUN] Would remove: $old_file"
-        ((DELETED_COUNT++))
-    done < <(find "$BACKUPS_DIR" -type f \
-        \( -name "dump-*.sql.gz" -o -name "dump-*.archive.gz" \) \
-        -mtime +"$((RETENTION_DAYS - 1))" -print0 2>/dev/null)
+    log "🔍 [DRY-RUN] Backup retention preview (would remove dumps beyond the $RETENTION_DAYS most recent per database):"
+    for db_target in "$BACKUPS_DIR"/*/; do
+        [ -d "$db_target" ] || continue
+        # Skip the log dir
+        [ "$(realpath "$db_target")" = "$(realpath "$LOG_DIR")" ] && continue
+        while IFS= read -r old_file; do
+            log "    [DRY-RUN] Would remove: $old_file"
+            ((DELETED_COUNT++))
+        done < <(_files_to_rotate "$db_target" "dump-*.gz")
+    done
     [ $DELETED_COUNT -gt 0 ] \
         && log "    Would remove $DELETED_COUNT backup file(s) (dry-run)." \
         || log "    No backup files to remove."

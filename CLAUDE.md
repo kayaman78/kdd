@@ -29,12 +29,12 @@ kdd/
 1. Action TypeScript apre il terminal e lancia `dockerCommand` in una sola call: `execute_server_terminal` con `init: { command: "bash", recreate: Always }`
 2. `dockerCommand` esegue `docker pull` + `docker run -d --entrypoint sleep infinity` + `docker network connect` per ogni `backup_networks` extra + `docker exec backup.sh`
 3. `trap EXIT` nel bash script rimuove il container al termine (sempre, anche su errore/timeout)
-4. Cleanup terminal nel `finally` block: `execute_server_terminal("exit 0")` (no `init`) → 500ms → `DeleteTerminal`
+4. Cleanup terminal nel `finally` block: solo `DeleteTerminal` — Komodo v2 termina la shell e libera risorse internamente.
 
-## Terminal lifecycle KDD — CRITICO
-Il `finally` block usa `execute_server_terminal("exit 0")` + attesa 500ms + `DeleteTerminal`.
-**Non modificare questa sequenza** — è il meccanismo che garantisce la chiusura del terminal Komodo dopo `dockerCommand` (che esce con `set -e + trap` in stato non sempre deterministico).
-**Importante**: nel cleanup `execute_server_terminal` NON passa `init` — il terminal esiste già dalla call principale; passare `init: { recreate: Always }` qui spawnerebbe una nuova shell solo per cancellarla, sprecando un round-trip.
+## Terminal lifecycle KDD
+Il `finally` block esegue **solo** `DeleteTerminal`. Allineato al pattern KCR — in Komodo v2 questa è la chiusura corretta: il SDK termina la shell e libera risorse senza bisogno di "exit 0" esplicito + grazia.
+
+**Storico**: la versione v2.0.0 (S196) preservava il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) come misura difensiva contro residui in UI Komodo. Test runtime S199 ha mostrato che in v2 il pattern v1 fa hang del finally: sending un command a un terminal la cui shell è già exited dal `dockerCommand` (set -e + trap EXIT) lascia la promise SDK pendente all'infinito — l'action resta "running" fino a riavvio container Komodo. Fix v2.0.1 (S199): cleanup minimale come KCR.
 
 ## Single-instance-per-server design (consapevole)
 Sia `containerName = "kdd-backup-runner"` sia `terminalName = "kdd-backup-temp"` sono **hardcoded by design**. Conseguenza: due action KDD lanciate concorrentemente sullo stesso server collidono (sul container Docker prima ancora che sul terminal Komodo, perché il `--name` di `docker run` deve essere unico). Non è un bug — KDD è pensato per girare una volta per server schedulato (backup notturno, hourly, etc.), non in parallelo. Il pattern difensivo è: `recreate: Always` sul terminal + `docker rm -f` nel `trap EXIT` del bash script — entrambi nukeano residui da run precedenti killed/timeout. Se serve concurrency multi-action (es. backup parallelo per network diversa sullo stesso server), prima va resa unica `containerName` (es. `kdd-backup-runner-${runner_network}`) e di conseguenza `terminalName`. Per ora: una action KDD per (server, network), schedulate sequenzialmente in una Komodo Procedure.
@@ -95,7 +95,9 @@ Il risultato di ogni verify è **sempre una singola riga** nel formato `OK` / `W
 3. `_check_size_drop`: confronto size vs backup precedente — output catturato via `$()` e relay al caller, nessun double-echo
 
 ## Retention
-`rotate_backups()` usa `-mtime +"$((RETENTION_DAYS - 1))"` — coerente con DABS e DABV (conserva esattamente RETENTION_DAYS giorni).
+`rotate_backups()` mantiene gli **ultimi RETENTION_DAYS dump per database** (semantica N-most-recent, calendar-independent). Stessa policy applicata a logs (`backup_*.log`). Coerente con DABS e DABV.
+
+**Perché non più calendar-based** (fix S199): la versione precedente usava `find -mtime +"$((RETENTION_DAYS - 1))" -delete`, che cancellava tutto ciò che era più vecchio di N giorni dal *now*. Caso d'uso roto: backup pausato per 30 giorni → alla prima nuova copia tutti gli archivi precedenti sparivano, lasciando 1 solo dump fresh. Il fix N-most-recent garantisce che gli archivi esistenti sopravvivano finché non vengono rimpiazzati uno-a-uno da nuovi dump. Implementazione: helper `_files_to_rotate()` che elenca i file di un target ordinati per mtime desc e ritorna quelli oltre i top N — usato da rotate_backups e log retention identicamente.
 
 ## configure_msmtp — TLS
 ```
@@ -152,11 +154,12 @@ dump_path/
 ```
 
 ## Coerenza con l'ecosistema
-- Retention: `-mtime +"$((RETENTION_DAYS - 1))"` — identico a DABS e DABV
+- Retention: N-most-recent (mantieni gli ultimi RETENTION_DAYS dump per target) — identico a DABS e DABV post-fix S199
 - Notifiche: struttura `send_telegram` / `send_ntfy` / `build_text_summary` — allineata a DABS/DABV
 - Email: usa `msmtp` (DABS/DABV usano `swaks`)
 - YAML: usa `yq` (DABV usa parser bash puro)
 - Timeout action: `timeout_seconds` con default 3600s (KCR ha default 300s per-command)
+- Komodo v2 cleanup: solo `DeleteTerminal` nel finally — identico a KCR
 
 ## Non implementato
 - Redis support (manca client nel container)
