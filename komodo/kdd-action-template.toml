@@ -159,26 +159,12 @@ exit $_kdd_rc
         throw err;
 
     } finally {
-        // Two-step cleanup: graceful shell exit → DeleteTerminal.
-        // The bash shell opened by `init` stays alive after the command finishes,
-        // leaving the terminal open in Komodo UI. Sending "exit 0" closes it.
-        // Promise.race guards against the edge case where the shell already died
-        // (e.g. set -e in non-interactive mode) — the SDK promise would hang
-        // indefinitely, so we cap the wait at 2s and fall through to DeleteTerminal.
+        // Only DeleteTerminal here — no execute_server_terminal.
+        // The shell is already exited via "exit $_kdd_rc" at the end of
+        // dockerCommand. Using execute_server_terminal in finally opens
+        // a dangling SDK connection that keeps the action in "running" state
+        // even after the function returns.
         console.log("🧹 Cleaning up terminal resources...");
-        try {
-            await Promise.race([
-                komodo.execute_server_terminal(
-                    {
-                        server: config.server_name,
-                        terminal: terminalName,
-                        command: "exit 0",
-                    },
-                    { onLine: () => {}, onFinish: () => {} }
-                ),
-                new Promise(r => setTimeout(r, 2000)),
-            ]);
-        } catch (e) { /* graceful exit failed — proceed to hard cleanup */ }
         try {
             await komodo.write("DeleteTerminal", {
                 server: config.server_name,
