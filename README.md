@@ -294,9 +294,9 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 
 ## Changelog
 
-### v2.0.2 — Terminal cleanup fix + image update
-- **Action cleanup**: `finally` block now sends `exit 0` to the bash shell (with `Promise.race` 2s timeout guard) before calling `DeleteTerminal`. The previous v2.0.1 pattern (only `DeleteTerminal`) did not actually close the bash shell opened by `init`, leaving terminals open in Komodo UI. Aligned KDD and KCR to the same two-step cleanup pattern.
-- `.ts` and `.toml` are now aligned — v2.0.1 had divergent cleanup code between the two files.
+### v2.0.2 — Fix stale terminals + image update
+- **DeleteTerminal fix**: `DeleteTerminal` was passing flat params (`{server, terminal, name}`) with an `as any` cast. The correct structure is `{target: {type: "Server", params: {server}}, terminal}`. The type mismatch was hidden by the cast — `DeleteTerminal` was silently failing since v2.0.0, which is why terminals accumulated in Komodo UI. Found by reading the `komodo_client` npm package source (`terminal.ts`).
+- **Removed all `execute_server_terminal("exit 0")` calls**. `execute_server_terminal` opens an HTTP streaming connection that resolves only when the server sends `__KOMODO_EXIT_CODE`. Sending `exit` kills the bash shell but the stream never closes — the promise hangs forever and the action stays in "running" state indefinitely. With the correct `DeleteTerminal` params, the terminal is properly killed and removed.
 - **Image update**: `postgresql-client-17` → `postgresql-client-18` (backward compatible 12-17), `yq` v4.40.5 → v4.53.3, MongoDB Database Tools 100.14.0 → 100.17.0. Label version bumped to 2.0.2.
 - No changes to user-facing parameters.
 
