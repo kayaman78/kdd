@@ -106,8 +106,6 @@ ${networkConnectCmds}
 
 echo "[KDD] Running backup..."
 docker exec ${containerName} /app/backup.sh
-_kdd_rc=$?
-exit $_kdd_rc
 `.trim();
 
     let exitCode: string | null = null;
@@ -162,10 +160,9 @@ exit $_kdd_rc
         console.log("🧹 Cleaning up terminal resources...");
         try {
             await komodo.write("DeleteTerminal", {
-                server: config.server_name,
-                name: terminalName,
-                terminal: terminalName
-            } as any);
+                target: { type: "Server", params: { server: config.server_name } },
+                terminal: terminalName,
+            });
             console.log("✅ Terminal resource removed.");
         } catch (e) {
             console.log("⚠️ Cleanup: Terminal already closed.");
