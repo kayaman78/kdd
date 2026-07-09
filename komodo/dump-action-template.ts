@@ -152,15 +152,26 @@ docker exec ${containerName} /app/backup.sh
         throw err;
 
     } finally {
-        // Always delete the terminal — even if the docker workflow failed or timed out.
-        // In Komodo v2 `DeleteTerminal` alone is sufficient: it terminates the shell
-        // and frees resources internally. The legacy v1 pattern (graceful "exit 0" via
-        // execute_server_terminal + grace period + DeleteTerminal) is harmful here:
-        // sending a command to a terminal whose shell has already exited from
-        // `dockerCommand` (set -e + trap EXIT path) leaves the SDK promise pending
-        // indefinitely, which is why the action used to hang in "running" until
-        // Komodo itself was restarted. Aligned with the KCR cleanup pattern.
+        // Two-step cleanup: graceful shell exit → DeleteTerminal.
+        // The bash shell opened by `init` stays alive after the command finishes,
+        // leaving the terminal open in Komodo UI. Sending "exit 0" closes it.
+        // Promise.race guards against the edge case where the shell already died
+        // (e.g. set -e in non-interactive mode) — the SDK promise would hang
+        // indefinitely, so we cap the wait at 2s and fall through to DeleteTerminal.
         console.log("🧹 Cleaning up terminal resources...");
+        try {
+            await Promise.race([
+                komodo.execute_server_terminal(
+                    {
+                        server: config.server_name,
+                        terminal: terminalName,
+                        command: "exit 0",
+                    },
+                    { onLine: () => {}, onFinish: () => {} }
+                ),
+                new Promise(r => setTimeout(r, 2000)),
+            ]);
+        } catch (e) { /* graceful exit failed — proceed to hard cleanup */ }
         try {
             await komodo.write("DeleteTerminal", {
                 server: config.server_name,

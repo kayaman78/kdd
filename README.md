@@ -294,6 +294,11 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 
 ## Changelog
 
+### v2.0.2 — Terminal cleanup fix (stale terminals)
+- **Action cleanup**: `finally` block now sends `exit 0` to the bash shell (with `Promise.race` 2s timeout guard) before calling `DeleteTerminal`. The previous v2.0.1 pattern (only `DeleteTerminal`) did not actually close the bash shell opened by `init`, leaving terminals open in Komodo UI. The timeout protects against the edge case where the shell already exited and the SDK promise would hang indefinitely. Aligned KDD and KCR to the same two-step cleanup pattern.
+- `.ts` and `.toml` are now aligned — v2.0.1 had divergent cleanup code between the two files.
+- No changes to user-facing parameters or the KDD container image.
+
 ### v2.0.1 — Action cleanup hang fix + retention semantic fix
 - **Action cleanup**: `finally` block in `dump-action-template.ts` ora esegue solo `DeleteTerminal`, allineato al pattern KCR. Il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) ereditato in v2.0.0 causava hang del finally quando la shell del `dockerCommand` era già exited (set -e + trap EXIT path): la promise SDK restava pendente all'infinito, con l'action che appariva "running" fino a riavvio container Komodo. In Komodo v2 `DeleteTerminal` da solo basta — il SDK termina la shell e libera risorse internamente.
 - **Retention semantic** (`backup.sh`): cambiata da calendar-based (`find -mtime +N -delete`) a N-most-recent. `RETENTION_DAYS` ora significa "mantieni gli ultimi N dump per database" indipendentemente dal calendario. Caso d'uso protetto: backup pausato per >N giorni — alla prima nuova copia gli archivi precedenti sopravvivono finché non vengono rimpiazzati uno-a-uno. Stessa policy applicata a logs (`backup_*.log`). Helper `_files_to_rotate()` centralizza la logica usata da rotate_backups + log retention + dry-run preview.

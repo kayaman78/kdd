@@ -29,12 +29,12 @@ kdd/
 1. Action TypeScript apre il terminal e lancia `dockerCommand` in una sola call: `execute_server_terminal` con `init: { command: "bash", recreate: Always }`
 2. `dockerCommand` esegue `docker pull` + `docker run -d --entrypoint sleep infinity` + `docker network connect` per ogni `backup_networks` extra + `docker exec backup.sh`
 3. `trap EXIT` nel bash script rimuove il container al termine (sempre, anche su errore/timeout)
-4. Cleanup terminal nel `finally` block: solo `DeleteTerminal` — Komodo v2 termina la shell e libera risorse internamente.
+4. Cleanup terminal nel `finally` block: `exit 0` con `Promise.race` timeout 2s → `DeleteTerminal`. L'exit chiude la shell bash, il timeout protegge dal caso in cui la shell sia già morta (promise SDK pendente all'infinito). DeleteTerminal come pulizia risorsa Komodo.
 
 ## Terminal lifecycle KDD
-Il `finally` block esegue **solo** `DeleteTerminal`. Allineato al pattern KCR — in Komodo v2 questa è la chiusura corretta: il SDK termina la shell e libera risorse senza bisogno di "exit 0" esplicito + grazia.
+Il `finally` block esegue un cleanup a due passi: prima invia `exit 0` alla shell bash (wrappato in `Promise.race` con timeout 2s per evitare hang se la shell è già morta), poi `DeleteTerminal` per rimuovere la risorsa terminale da Komodo. Allineato al pattern KCR.
 
-**Storico**: la versione v2.0.0 (S196) preservava il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) come misura difensiva contro residui in UI Komodo. Test runtime S199 ha mostrato che in v2 il pattern v1 fa hang del finally: sending un command a un terminal la cui shell è già exited dal `dockerCommand` (set -e + trap EXIT) lascia la promise SDK pendente all'infinito — l'action resta "running" fino a riavvio container Komodo. Fix v2.0.1 (S199): cleanup minimale come KCR.
+**Storico**: v2.0.0 (S196) pattern v1 a tre passi senza attesa (`exit 0` → 500ms sleep → `DeleteTerminal`) — non aspettava il completamento dell'exit, terminali restavano aperti. v2.0.1 (S199) solo `DeleteTerminal` — non chiudeva la shell bash, terminali restavano aperti nella UI. v2.0.2 (S406) pattern definitivo: `exit 0` con `Promise.race` timeout + `DeleteTerminal` — la shell viene chiusa davvero, il timeout protegge dall'hang.
 
 ## Single-instance-per-server design (consapevole)
 Sia `containerName = "kdd-backup-runner"` sia `terminalName = "kdd-backup-temp"` sono **hardcoded by design**. Conseguenza: due action KDD lanciate concorrentemente sullo stesso server collidono (sul container Docker prima ancora che sul terminal Komodo, perché il `--name` di `docker run` deve essere unico). Non è un bug — KDD è pensato per girare una volta per server schedulato (backup notturno, hourly, etc.), non in parallelo. Il pattern difensivo è: `recreate: Always` sul terminal + `docker rm -f` nel `trap EXIT` del bash script — entrambi nukeano residui da run precedenti killed/timeout. Se serve concurrency multi-action (es. backup parallelo per network diversa sullo stesso server), prima va resa unica `containerName` (es. `kdd-backup-runner-${runner_network}`) e di conseguenza `terminalName`. Per ora: una action KDD per (server, network), schedulate sequenzialmente in una Komodo Procedure.
@@ -159,7 +159,7 @@ dump_path/
 - Email: usa `msmtp` (DABS/DABV usano `swaks`)
 - YAML: usa `yq` (DABV usa parser bash puro)
 - Timeout action: `timeout_seconds` con default 3600s (KCR ha default 300s per-command)
-- Komodo v2 cleanup: solo `DeleteTerminal` nel finally — identico a KCR
+- Komodo v2 cleanup: `exit 0` con `Promise.race` timeout 2s → `DeleteTerminal` — identico a KCR
 
 ## Non implementato
 - Redis support (manca client nel container)
