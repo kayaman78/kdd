@@ -111,6 +111,8 @@ ${networkConnectCmds}
 
 echo "[KDD] Running backup..."
 docker exec ${containerName} /app/backup.sh
+_kdd_rc=$?
+exit $_kdd_rc
 `.trim();
 
     let exitCode: string | null = null;
