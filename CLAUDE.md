@@ -21,8 +21,8 @@ kdd/
 
 ## Stack
 - **Base image:** `debian:12-slim`
-- **DB clients:** `mysql-client`, `postgresql-client-17`, `mongodump` v100.14.0
-- **Tools:** `docker-ce-cli`, `yq` v4.40.5, `jq`, `msmtp`, `curl`, `gzip`
+- **DB clients:** `mysql-client`, `postgresql-client-18`, `mongodump` v100.17.0
+- **Tools:** `docker-ce-cli`, `yq` v4.53.3, `jq`, `msmtp`, `curl`, `gzip`
 - **Image pubblicata:** `ghcr.io/kayaman78/kdd:latest`
 
 ## Flusso Komodo Action (v2 API)

@@ -34,7 +34,7 @@ Universal database backup solution for Docker environments, designed to work sea
 |----------|----------|---------------|------------|
 | MySQL | All | mysqldump | Yes (InnoDB) |
 | MariaDB | All | mysqldump | Yes |
-| PostgreSQL | 12-17 | pg_dump | Yes |
+| PostgreSQL | 12-18 | pg_dump | Yes |
 | MongoDB | 4.x-8.x | mongodump | Yes |
 
 ---
@@ -294,10 +294,11 @@ The [Changelog](#changelog) documents every change per version. If a release onl
 
 ## Changelog
 
-### v2.0.2 — Terminal cleanup fix (stale terminals)
-- **Action cleanup**: `finally` block now sends `exit 0` to the bash shell (with `Promise.race` 2s timeout guard) before calling `DeleteTerminal`. The previous v2.0.1 pattern (only `DeleteTerminal`) did not actually close the bash shell opened by `init`, leaving terminals open in Komodo UI. The timeout protects against the edge case where the shell already exited and the SDK promise would hang indefinitely. Aligned KDD and KCR to the same two-step cleanup pattern.
+### v2.0.2 — Terminal cleanup fix + image update
+- **Action cleanup**: `finally` block now sends `exit 0` to the bash shell (with `Promise.race` 2s timeout guard) before calling `DeleteTerminal`. The previous v2.0.1 pattern (only `DeleteTerminal`) did not actually close the bash shell opened by `init`, leaving terminals open in Komodo UI. Aligned KDD and KCR to the same two-step cleanup pattern.
 - `.ts` and `.toml` are now aligned — v2.0.1 had divergent cleanup code between the two files.
-- No changes to user-facing parameters or the KDD container image.
+- **Image update**: `postgresql-client-17` → `postgresql-client-18` (backward compatible 12-17), `yq` v4.40.5 → v4.53.3, MongoDB Database Tools 100.14.0 → 100.17.0. Label version bumped to 2.0.2.
+- No changes to user-facing parameters.
 
 ### v2.0.1 — Action cleanup hang fix + retention semantic fix
 - **Action cleanup**: `finally` block in `dump-action-template.ts` ora esegue solo `DeleteTerminal`, allineato al pattern KCR. Il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) ereditato in v2.0.0 causava hang del finally quando la shell del `dockerCommand` era già exited (set -e + trap EXIT path): la promise SDK restava pendente all'infinito, con l'action che appariva "running" fino a riavvio container Komodo. In Komodo v2 `DeleteTerminal` da solo basta — il SDK termina la shell e libera risorse internamente.

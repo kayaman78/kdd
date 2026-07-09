@@ -2,7 +2,7 @@
 # KDD - Komodo Database Dumper
 # =============================================================================
 # Universal database backup container for Docker environments
-# Supports: MySQL/MariaDB 5.5-12.x, PostgreSQL 12-17, MongoDB 4.2-8.0
+# Supports: MySQL/MariaDB 5.5-12.x, PostgreSQL 12-18, MongoDB 4.2-8.0
 #
 # Build:
 #   docker build -t ghcr.io/yourusername/kdd:latest .
@@ -14,7 +14,7 @@ FROM debian:12-slim
 
 LABEL maintainer="KDD Backup Tool" \
       description="Komodo Database Dumper - Universal Database Backup" \
-      version="1.0.0" \
+      version="2.0.2" \
       org.opencontainers.image.source="https://github.com/kayaman78/kdd"
 
 # -----------------------------------------------------------------------------
@@ -45,7 +45,7 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     https://download.docker.com/linux/debian bookworm stable" \
     > /etc/apt/sources.list.d/docker.list
 
-# Add PostgreSQL official repository (client 17, backward compatible 12-16)
+# Add PostgreSQL official repository (client 18, backward compatible 12-17)
 RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
     gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] \
@@ -58,7 +58,7 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     docker-ce-cli \
     default-mysql-client \
-    postgresql-client-17 \
+    postgresql-client-18 \
     bash \
     coreutils \
     findutils \
@@ -75,11 +75,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install yq v4 (YAML processor)
 RUN wget -qO /usr/local/bin/yq \
-    https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64 && \
+    https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64 && \
     chmod +x /usr/local/bin/yq
 
-# Install MongoDB Database Tools (100.14.0 - supports MongoDB 4.2-8.0)
-RUN wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.14.0.deb \
+# Install MongoDB Database Tools (100.17.0 - supports MongoDB 4.2-8.0)
+RUN wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.17.0.deb \
     -O /tmp/mongo-tools.deb && \
     dpkg -i /tmp/mongo-tools.deb && \
     rm /tmp/mongo-tools.deb
