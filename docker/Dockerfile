@@ -5,16 +5,16 @@
 # Supports: MySQL/MariaDB 5.5-12.x, PostgreSQL 12-18, MongoDB 4.2-8.0
 #
 # Build:
-#   docker build -t ghcr.io/yourusername/kdd:latest .
+#   docker build -t ghcr.io/kayaman78/kdd:3 .
 #
 # License: MIT
 # =============================================================================
 
-FROM debian:12-slim
+FROM debian:13-slim
 
 LABEL maintainer="KDD Backup Tool" \
       description="Komodo Database Dumper - Universal Database Backup" \
-      version="2.0.2" \
+      version="3.0.1" \
       org.opencontainers.image.source="https://github.com/kayaman78/kdd"
 
 # -----------------------------------------------------------------------------
@@ -42,14 +42,14 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
     chmod a+r /etc/apt/keyrings/docker.asc && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
-    https://download.docker.com/linux/debian bookworm stable" \
+    https://download.docker.com/linux/debian trixie stable" \
     > /etc/apt/sources.list.d/docker.list
 
 # Add PostgreSQL official repository (client 18, backward compatible 12-17)
 RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
     gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] \
-    http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+    http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
     > /etc/apt/sources.list.d/pgdg.list
 
 # -----------------------------------------------------------------------------
@@ -59,6 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     docker-ce-cli \
     default-mysql-client \
     postgresql-client-18 \
+    libgssapi-krb5-2 \
     bash \
     coreutils \
     findutils \
@@ -79,6 +80,7 @@ RUN wget -qO /usr/local/bin/yq \
     chmod +x /usr/local/bin/yq
 
 # Install MongoDB Database Tools (100.17.0 - supports MongoDB 4.2-8.0)
+# No debian13 build exists yet — debian12 .deb works with libgssapi-krb5-2
 RUN wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian12-x86_64-100.17.0.deb \
     -O /tmp/mongo-tools.deb && \
     dpkg -i /tmp/mongo-tools.deb && \
