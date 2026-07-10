@@ -569,10 +569,14 @@ if [ "$mysql_count" -gt 0 ]; then
 
         log "  📦 Backing up: $name"
 
+        local err_file
+        err_file=$(mktemp)
+
         if mysqldump -h "$host" -P "$port" -u "$user" -p"$pass" \
             --single-transaction --routines --triggers --events \
-            "$db" 2>/dev/null | gzip > "$filepath"; then
+            "$db" 2>"$err_file" | gzip > "$filepath"; then
 
+            rm -f "$err_file"
             size=$(du -h "$filepath" | cut -f1)
             log "    ✅ Backup OK: $size"
             ((total_backups++)); ((mysql_ok++))
@@ -592,6 +596,12 @@ if [ "$mysql_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  ❌ Failed: $name"
+            if [ -s "$err_file" ]; then
+                while IFS= read -r errline; do
+                    log_error "    $errline"
+                done < "$err_file"
+            fi
+            rm -f "$err_file"
             ((failed_backups++)); ((mysql_fail++))
             backup_details+=$(add_db_to_report "$name" "MySQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
@@ -636,10 +646,13 @@ if [ "$pg_count" -gt 0 ]; then
         log "  📦 Backing up: $name"
 
         export PGPASSWORD="$pass"
+        local err_file
+        err_file=$(mktemp)
 
         if pg_dump -h "$host" -p "$port" -U "$user" -d "$db" \
-            --no-password --clean --if-exists 2>/dev/null | gzip > "$filepath"; then
+            --no-password --clean --if-exists 2>"$err_file" | gzip > "$filepath"; then
 
+            rm -f "$err_file"
             size=$(du -h "$filepath" | cut -f1)
             log "    ✅ Backup OK: $size"
             ((total_backups++)); ((pg_ok++))
@@ -659,6 +672,12 @@ if [ "$pg_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  ❌ Failed: $name"
+            if [ -s "$err_file" ]; then
+                while IFS= read -r errline; do
+                    log_error "    $errline"
+                done < "$err_file"
+            fi
+            rm -f "$err_file"
             ((failed_backups++)); ((pg_fail++))
             backup_details+=$(add_db_to_report "$name" "PostgreSQL" "failed" "N/A" "skipped")
             rm -f "$filepath"
@@ -705,10 +724,14 @@ if [ "$mongo_count" -gt 0 ]; then
 
         log "  📦 Backing up: $name"
 
+        local err_file
+        err_file=$(mktemp)
+
         if mongodump --host="$host" --port="$port" --username="$user" \
             --password="$pass" --authenticationDatabase="$authdb" \
-            --db="$db" --archive="$filepath" --gzip 2>/dev/null && [ -s "$filepath" ]; then
+            --db="$db" --archive="$filepath" --gzip 2>"$err_file" && [ -s "$filepath" ]; then
 
+            rm -f "$err_file"
             size=$(du -h "$filepath" | cut -f1)
             log "    ✅ Backup OK: $size"
             ((total_backups++)); ((mongo_ok++))
@@ -728,6 +751,12 @@ if [ "$mongo_count" -gt 0 ]; then
             rotate_backups "$target"
         else
             log_error "  ❌ Failed: $name"
+            if [ -s "$err_file" ]; then
+                while IFS= read -r errline; do
+                    log_error "    $errline"
+                done < "$err_file"
+            fi
+            rm -f "$err_file"
             ((failed_backups++)); ((mongo_fail++))
             backup_details+=$(add_db_to_report "$name" "MongoDB" "failed" "N/A" "skipped")
             rm -f "$filepath"
