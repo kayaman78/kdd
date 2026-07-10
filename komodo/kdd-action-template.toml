@@ -111,6 +111,7 @@ ${networkConnectCmds}
 
 echo "[KDD] Running backup..."
 docker exec ${containerName} /app/backup.sh
+exit $?
 `.trim();
 
     let exitCode: string | null = null;
@@ -158,7 +159,7 @@ docker exec ${containerName} /app/backup.sh
 
     } finally {
         // Only DeleteTerminal here — no execute_server_terminal.
-        // The shell is already exited via "exit $_kdd_rc" at the end of
+        // The shell is already exited via "exit $?" at the end of
         // dockerCommand. Using execute_server_terminal in finally opens
         // a dangling SDK connection that keeps the action in "running" state
         // even after the function returns.
