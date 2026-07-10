@@ -14,7 +14,7 @@ FROM debian:13-slim
 
 LABEL maintainer="KDD Backup Tool" \
       description="Komodo Database Dumper - Universal Database Backup" \
-      version="3.0.1" \
+      version="3.1.0" \
       org.opencontainers.image.source="https://github.com/kayaman78/kdd"
 
 # -----------------------------------------------------------------------------

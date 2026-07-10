@@ -18,7 +18,7 @@ kdd/
 ## Stack
 - Debian 12 slim, `default-mysql-client`, `postgresql-client-18`, `mongodump` 100.17.0
 - `docker-ce-cli`, `yq` 4.53.3, `jq`, `msmtp`, `curl`, `gzip`
-- Image: `ghcr.io/kayaman78/kdd:3` (anche `:latest`)
+- Image: `ghcr.io/kayaman78/kdd:3` (tag 3.1.0, anche `:latest`)
 
 ## Action — pipeline sequenziale (v3.0.0)
 
@@ -43,7 +43,8 @@ Cleanup finally: `execSafe()` (Promise.race 15s) rimuove container, `deleteTermi
 - MySQL/MariaDB: `mysqldump --single-transaction --routines --triggers --events | gzip`
 - PostgreSQL: `pg_dump --clean --if-exists | gzip`
 - MongoDB: `mongodump --archive --gzip`
-- Stderr catturato su file temp — loggato riga per riga su failure, scartato su success.
+- Stderr catturato su file temp — loggato riga per riga su failure, scartato su success
+- `--skip-ssl-verify-server-cert` su mysqldump — accetta certificati self-signed (MariaDB 11.8 verifica TLS di default)
 
 ## Verify 3-step
 1. `gzip -t` integrità

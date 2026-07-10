@@ -1,6 +1,6 @@
 # KDD — Komodo Database Dumper
 
-**Version**: 3.0.0 | **Requires**: Komodo v2 | **License**: MIT
+**Version**: 3.1.0 | **Requires**: Komodo v2 | **License**: MIT
 
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 [![Komodo](https://img.shields.io/badge/komodo-action-blue.svg)](https://github.com/mbecker20/komodo)
@@ -139,6 +139,11 @@ Pre-built: `ghcr.io/kayaman78/kdd:3` and `:latest`
 ---
 
 ## Changelog
+
+### v3.1.0
+- Debian 13 (trixie): MariaDB client 10.11 → 11.8, Docker/PG repos updated.
+- `--skip-ssl-verify-server-cert` on mysqldump — MariaDB 11.8 verifies TLS by default, breaks on self-signed certs.
+- mongodump: debian12 .deb on debian13 with `libgssapi-krb5-2`.
 
 ### v3.0.0
 - **Rewrite**: action now uses sequential single-command pipeline (same pattern as KCR). Fixes permanent hang caused by multi-line bash blocks — SDK `execute_server_terminal` never resolves the promise for multi-line commands.
