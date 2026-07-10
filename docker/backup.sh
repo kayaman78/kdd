@@ -572,6 +572,7 @@ if [ "$mysql_count" -gt 0 ]; then
         err_file=$(mktemp)
 
         if mysqldump -h "$host" -P "$port" -u "$user" -p"$pass" \
+            --skip-ssl-verify-server-cert \
             --single-transaction --routines --triggers --events \
             "$db" 2>"$err_file" | gzip > "$filepath"; then
 
