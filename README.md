@@ -1,374 +1,169 @@
 # KDD — Komodo Database Dumper
 
-**Project Status**: Active development | **Latest Version**: 2.0.0 | **Maintained**: Yes | **Requires**: Komodo v2
+**Version**: 3.0.0 | **Requires**: Komodo v2 | **License**: MIT
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 [![Komodo](https://img.shields.io/badge/komodo-action-blue.svg)](https://github.com/mbecker20/komodo)
 
-Universal database backup solution for Docker environments, designed to work seamlessly with [Komodo](https://github.com/mbecker20/komodo) orchestration.
+Universal database backup for Docker environments, designed for [Komodo](https://github.com/mbecker20/komodo) orchestration.
 
-> Part of the **KDD ecosystem** — see also [DABS](https://github.com/kayaman78/dabs) for SQLite, [DABV](https://github.com/kayaman78/dabv) for Docker volumes, and [KCR](https://github.com/kayaman78/kcr) to run shell-based backup tools from a Komodo Action.
+> Part of the **KDD ecosystem** — see also [DABS](https://github.com/kayaman78/dabs) for SQLite, [DABV](https://github.com/kayaman78/dabv) for Docker volumes, and [KCR](https://github.com/kayaman78/kcr) to run shell-based tools from Komodo.
 
 ---
 
 ## Features
 
-- **Automatic Discovery**: Scans running Docker containers and detects databases automatically
-- **Multi-Database Support**: MySQL/MariaDB (all versions), PostgreSQL 12-17, MongoDB 4.x-8.x
-- **Safe Hot Backups**: Uses transaction-safe methods for consistent backups without downtime
-- **Automatic Rotation**: Configurable retention policy (default: 7 days)
-- **Backup Verification**: Every backup is verified immediately after creation (gzip integrity, dump completion marker, size trend)
-- **Email Notifications**: Optional HTML email reports with color-coded status per database, separate Backup and Verify columns
-- **Push Notifications**: Optional Telegram and ntfy alerts — fully independent from each other and from email
-- **Detailed Logging**: Daily log files with automatic retention-based rotation
-- **PUID/PGID Support**: LinuxServer.io style user mapping for correct file permissions
-- **Network Aware**: Automatically detects and uses correct Docker networks
-- **Lightweight**: Debian-based image with only required database clients
+- **Multi-database**: MySQL/MariaDB, PostgreSQL 12–18, MongoDB 4.x–8.x
+- **Auto-discovery**: setup wizard scans running containers
+- **Safe hot backups**: transaction-safe methods, no downtime
+- **3-step verification**: gzip integrity, completion marker, size trend
+- **N-most-recent retention**: keeps last N dumps per database (not calendar-based)
+- **Notifications**: email (HTML), Telegram, ntfy — independent channels
+- **Multi-network**: connects to multiple Docker networks per run
+- **PUID/PGID**: correct file permissions via user mapping
 
 ---
-
-## Supported Databases
-
-| Database | Versions | Backup Method | Hot Backup |
-|----------|----------|---------------|------------|
-| MySQL | All | mysqldump | Yes (InnoDB) |
-| MariaDB | All | mysqldump | Yes |
-| PostgreSQL | 12-18 | pg_dump | Yes |
-| MongoDB | 4.x-8.x | mongodump | Yes |
-
----
-
-## SQLite Support
-
-KDD handles network-based databases via Docker. SQLite is file-based and requires a different approach — which is exactly what the companion projects in this ecosystem are built for.
-
-### 🗄️ [DABS — Docker Automated Backup for SQLite](https://github.com/kayaman78/dabs)
-
-DABS is a standalone bash script that auto-discovers SQLite databases mounted by running containers, stops each service gracefully, compresses the files, and restarts — with WAL support, retention policy, and the same HTML email reporting you get from KDD.
-
-### 📦 [DABV — Docker Automated Backup for Volumes](https://github.com/kayaman78/dabv)
-
-DABV backs up named Docker volumes that don't have a bind mount path. It spins up a temporary Alpine container, mounts the volume read-only, and writes a compressed tar archive to the host — ready for restic or any other tool to pick up.
-
-### ⚙️ [KCR — Komodo Command Runner](https://github.com/kayaman78/kcr)
-
-KCR is a Komodo Action template that lets you run arbitrary shell commands on your servers directly from Komodo — including DABS and DABV. No extra containers, no mounts. Just drop the Action in Komodo, point it at your script, and you're done.
-
-### Running everything together
-
-The recommended setup is a **Komodo Procedure** that chains KDD and DABS sequentially:
-
-1. KDD Action → backs up MySQL, PostgreSQL, MongoDB
-2. KCR Action running DABS → backs up all SQLite databases on the same host
-3. KCR Action running DABV → backs up named Docker volumes
-4. One schedule, one place to monitor, separate email reports per job
-
-This gives you complete database coverage across your entire Docker stack with zero overlap and minimal configuration.
-
----
-
-## Prerequisites
-
-- Docker installed on host machine
-- Running Docker containers with databases
-- Access to `/var/run/docker.sock`
-- Basic knowledge of Docker commands
-- Komodo
 
 ## Quick Start
 
-### 1. Setup Configuration
-
-Run the setup script on your server to auto-discover databases.
-Use SSH or Komodo shell on the target server.
-Adjust the path of the Docker stacks.
+### 1. Setup config
 
 ```bash
 mkdir -p /dockerpath/kdd/{config,dump}
-cd /dockerpath/kdd
-
-docker pull ghcr.io/kayaman78/kdd:latest && \
+docker pull ghcr.io/kayaman78/kdd:3
 docker run --rm -it \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v $(pwd)/config:/config \
-  ghcr.io/kayaman78/kdd:latest /app/setup.sh
+  ghcr.io/kayaman78/kdd:3 /app/setup.sh
 ```
 
-See [SETUP.md](docker/SETUP.md) for detailed setup instructions.
+See [SETUP.md](docker/SETUP.md) for details.
 
-### 2. Import the Action Template
+### 2. Create the Action in Komodo
 
-In Komodo go to **Resource Sync → New Resource Sync**, paste the content of [kdd-action-template.toml](komodo/kdd-action-template.toml), and execute the sync. The Action template is created automatically with the TypeScript code and default parameters already in place.
+Create a new Action in Komodo, paste the content of [`dump-action-template.ts`](komodo/dump-action-template.ts) into the Script field, and fill the Args JSON with your values. See [Parameters](#parameters) for reference.
 
-Open the imported Action, go to the **Args** field, and fill in your values (server, paths, networks, notifications). See [Configuration Parameters](#configuration-parameters) for the full reference.
+### 3. Schedule
 
-### 3. Schedule Backups
-
-Configure an Action Schedule (e.g., daily at 2 AM) or use a Komodo Procedure for multiple sequential backups.
+Use an Action Schedule or a Komodo Procedure for sequential multi-tool backups.
 
 ---
 
-## Notifications
-
-KDD supports three independent notification channels. Each can be enabled or disabled without affecting the others.
-
-### Email
-
-Full HTML report with color-coded table, per-database Backup and Verify status, disk usage summary. Best for detailed post-run review.
-
-### Telegram
-
-Compact message sent to a bot/channel. Requires a bot token and chat ID. Set `telegram.enabled: "true"` and fill `token` and `chat_id`.
-
-Example message:
-```
-KDD Backup — prod-server | 2025-01-15 03:00
-MySQL 2 OK 0 ERR
-PostgreSQL 1 OK 0 ERR
-Verify 3 OK 0 WARN 0 ERR
-```
-
-### ntfy
-
-Sends a push notification to any ntfy-compatible client (ntfy.sh or self-hosted). Priority is set automatically: default on success, urgent on any backup or verify error — useful to wake up the device even in Do Not Disturb mode.
-
-Set `ntfy.enabled: "true"`, `ntfy.url` and `ntfy.topic`.
-
-### Log attachment
-
-Set `notify.attach_log: "true"` to attach the current day's log file to both Telegram and ntfy notifications. Useful to inspect errors directly from the phone without opening SSH.
-
----
-
-## Architecture
-
-**Network-based separation**: KDD uses Docker networks to organize backups. Create one Action per Docker network you want to backup. This allows:
-
-- Independent backup schedules per network (prod daily, test weekly)
-- Separate email notifications per environment
-- Network isolation for security
-
----
-
-## Configuration Parameters
+## Parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `server_name` | Komodo server name | required |
-| `runner_network` | Primary Docker network to start the KDD container on | required |
-| `backup_networks` | All networks to connect to — array or comma-separated string; must include `runner_network` | `[]` |
-| `config_path` | Host path to the KDD config directory | required |
-| `dump_path` | Host path to the backup output directory | required |
-| `image` | KDD Docker image to use | `ghcr.io/kayaman78/kdd:latest` |
-| `retention_days` | Number of most recent dumps to keep per database | `7` |
-| `timeout_seconds` | Max seconds to wait for the backup before raising a timeout error | `3600` |
+| `runner_network` | Primary Docker network | required |
+| `backup_networks` | Extra networks (array or comma-separated) | `[]` |
+| `config_path` | Host path to KDD config dir | required |
+| `dump_path` | Host path to backup output dir | required |
+| `image` | KDD Docker image | `ghcr.io/kayaman78/kdd:3` |
+| `retention_days` | Dumps to keep per database | `7` |
+| `timeout_seconds` | Max seconds for backup | `3600` |
 | `timezone` | Container timezone | `Europe/Rome` |
 | `server_display_name` | Name in notifications | `KDD` |
-| `job_name` | Name in email header | `Backup Report` |
-| `smtp.enabled` | Enable email reports | `false` |
-| `smtp.host` | SMTP server | - |
-| `smtp.port` | SMTP port | `587` |
-| `smtp.user` | SMTP username | - |
-| `smtp.pass` | SMTP password | - |
-| `smtp.from` | From email address | - |
-| `smtp.to` | To email (comma-separated) | - |
-| `smtp.tls` | TLS mode: auto/on/off | `auto` |
-| `telegram.enabled` | Enable Telegram notifications | `false` |
-| `telegram.token` | Bot token | - |
-| `telegram.chat_id` | Chat or channel ID | - |
-| `ntfy.enabled` | Enable ntfy notifications | `false` |
-| `ntfy.url` | ntfy server URL | - |
-| `ntfy.topic` | ntfy topic | - |
-| `notify.attach_log` | Attach log to push notifications | `false` |
-| `dry_run` | `"true"` = scan without writing any backups or touching files | `"false"` |
+| `job_name` | Email header name | `Backup Report` |
+| `dry_run` | `"true"` = scan only, no writes | `"false"` |
+| `smtp.*` | SMTP settings (enabled, host, port, user, pass, from, to, tls) | — |
+| `telegram.*` | Telegram settings (enabled, token, chat_id) | — |
+| `ntfy.*` | ntfy settings (enabled, url, topic) | — |
+| `notify.attach_log` | Attach log to push notifications | `"false"` |
 
 ---
 
 ## How It Works
 
-1. **Setup**: `setup.sh` scans Docker containers and generates `config.yaml`
-2. **Execution**: Komodo Action triggers `backup.sh` with network filter
-3. **Backup**: Creates compressed dumps of all databases on specified network
-4. **Verification**: Checks gzip integrity, dump completion marker, and size trend
-5. **Rotation**: Keeps the N most recent dumps per database (and logs); older ones removed only when replaced
-6. **Notification**: Sends email report, Telegram message, and/or ntfy alert — each independently
+1. **Setup**: `setup.sh` scans containers → generates `config.yaml`
+2. **Action pipeline**: pull image → start container → connect networks → run `backup.sh`
+3. **Backup**: compressed dumps per database type
+4. **Verify**: gzip integrity + completion marker + size trend
+5. **Rotate**: keep N most recent dumps and logs
+6. **Notify**: email, Telegram, ntfy (independent)
 
----
+### Dump errors
 
-## How Verification Works
+Stderr from `mysqldump`, `pg_dump`, and `mongodump` is captured and logged on failure. No errors are hidden.
 
-After each backup is created, KDD runs three checks in sequence.
+### Verification
 
-**1. gzip integrity**
-Runs `gzip -t` on the `.gz` file. Catches truncated or corrupt archives caused by write errors, disk issues, or interrupted dumps.
+| Check | MySQL/MariaDB | PostgreSQL | MongoDB |
+|-------|---------------|------------|---------|
+| gzip integrity | ✅ | ✅ | ✅ |
+| Completion marker | "Dump completed" | "PostgreSQL database dump complete" | N/A (atomic) |
+| Size trend | ✅ | ✅ | ✅ |
 
-**2. Dump completion marker**
-Reads the last 5 lines of the compressed dump via `zcat | tail -5` — no full decompression needed. Checks for the marker that the dump tool always writes as the final line when it completes successfully:
-
-- MySQL/MariaDB → `Dump completed`
-- PostgreSQL → `PostgreSQL database dump complete`
-- MongoDB → not applicable; mongodump writes atomically, gzip integrity + non-empty is sufficient
-
-**3. Size trend**
-Compares the size of the new backup against the most recent previous backup for the same database. If the new file is smaller by more than `SIZE_DROP_WARN`% (default: 20%), the verify is marked WARN. This catches silent data loss.
-
-### Verify vs Backup status in the email
-
-| Backup | Verify | Meaning |
-|--------|--------|---------|
-| success | OK | Backup written and verified clean |
-| success | WARN | Backup valid but size dropped unexpectedly — investigate |
-| success | FAIL | Backup written but corrupt or incomplete — do not rely on it |
-| failed | skipped | Backup failed, verify not attempted |
-
----
-
-## Log Structure
+### Multi-network
 
 ```
-/backups/
-├── <db-name>/
-│   └── dump-YYYY-MM-DD_HH-MM.sql.gz
-└── log/
-    ├── backup_20250115.log
-    ├── backup_20250116.log
-    └── ...
-```
-
----
-
-## Building
-
-Pre-built images are available at `ghcr.io/kayaman78/kdd:latest`
-
-To build locally:
-
-```bash
-docker build -t kdd:latest ./docker/
+Stack A (bridge-01): MySQL, PostgreSQL
+Stack B (bridge-02): MongoDB
+→ KDD starts on bridge-01, then docker network connect bridge-02
 ```
 
 ---
 
 ## Updating
 
-In Komodo, the **Script** field (TypeScript code) and the **Args** field (your JSON configuration) are stored separately. Updating KDD never touches your parameters — networks, paths, SMTP, Telegram, ntfy are all safe.
+**Script and Args are separate in Komodo.** Updating the script never touches your parameters.
 
-### Update the Action Script
+1. Open your KDD Action in Komodo
+2. Paste the new [`dump-action-template.ts`](komodo/dump-action-template.ts) into the Script field
+3. Save
 
-**1. Open the Action in Komodo**
-
-Go to Actions → select your KDD Action.
-
-**2. Replace the Script field only**
-
-Paste the new content of [`dump-action-template.ts`](komodo/dump-action-template.ts) into the Script field. Your Args JSON is in a separate field and is untouched.
-
-**3. Save**
-
-Done. No server changes, no re-entering parameters.
+If `backup.sh` changed, rebuild the image or pull the new tag.
 
 ---
 
-### Multiple servers
+## Ecosystem
 
-If you have one KDD Action per server (the standard setup), repeat the Script paste for each one. Since the code is identical across all actions and only the Args differ, this is a straightforward copy-paste for each action.
+| Project | What it backs up |
+|---------|-----------------|
+| **KDD** | MySQL, PostgreSQL, MongoDB |
+| [DABS](https://github.com/kayaman78/dabs) | SQLite |
+| [DABV](https://github.com/kayaman78/dabv) | Docker volumes |
+| [KCR](https://github.com/kayaman78/kcr) | Runs DABS/DABV from Komodo |
 
-> **Tip**: Update and test one action first. Once confirmed working, copy the Script field content into all remaining actions — parameters stay exactly as you configured them.
-
----
-
-### Update the KDD image
-
-If `backup.sh` changed (visible in the [Changelog](#changelog)), you need a new image. Pull it on the server or let the Action do it automatically — the `docker pull` at the start of each run always fetches the latest tag if you use `ghcr.io/kayaman78/kdd:latest`.
-
-No manual image update is needed if you use the `:latest` tag.
+Recommended: chain all four in a **Komodo Procedure** for complete coverage.
 
 ---
 
-### Check what changed before updating
+## Building
 
-The [Changelog](#changelog) documents every change per version. If a release only touches the Komodo Action TypeScript, you only need to update the Script field. If it also touches `backup.sh`, the image rebuild handles that automatically on the next pull.
+```bash
+docker build -t ghcr.io/kayaman78/kdd:3 ./docker/
+```
+
+Pre-built: `ghcr.io/kayaman78/kdd:3` and `:latest`
 
 ---
 
 ## Changelog
 
-### v2.0.2 — Fix stale terminals + image update
-- **DeleteTerminal fix**: `DeleteTerminal` was passing flat params (`{server, terminal, name}`) with an `as any` cast. The correct structure is `{target: {type: "Server", params: {server}}, terminal}`. The type mismatch was hidden by the cast — `DeleteTerminal` was silently failing since v2.0.0, which is why terminals accumulated in Komodo UI. Found by reading the `komodo_client` npm package source (`terminal.ts`).
-- **Removed all `execute_server_terminal("exit 0")` calls**. `execute_server_terminal` opens an HTTP streaming connection that resolves only when the server sends `__KOMODO_EXIT_CODE`. Sending `exit` kills the bash shell but the stream never closes — the promise hangs forever and the action stays in "running" state indefinitely. With the correct `DeleteTerminal` params, the terminal is properly killed and removed.
-- **Image update**: `postgresql-client-17` → `postgresql-client-18` (backward compatible 12-17), `yq` v4.40.5 → v4.53.3, MongoDB Database Tools 100.14.0 → 100.17.0. Label version bumped to 2.0.2.
-- No changes to user-facing parameters.
+### v3.0.0
+- **Rewrite**: action now uses sequential single-command pipeline (same pattern as KCR). Fixes permanent hang caused by multi-line bash blocks — SDK `execute_server_terminal` never resolves the promise for multi-line commands.
+- **Error logging**: dump stderr is captured and logged on failure instead of being discarded with `2>/dev/null`.
+- Pipeline: cleanup residual → pull → run → network connect → exec backup.sh.
+- Cleanup: `execSafe()` with `Promise.race` (15s cap) for container removal, `deleteTerminalSafe()` for terminal.
+- Removed TOML template — TS source is SoT.
 
-### v2.0.1 — Action cleanup hang fix + retention semantic fix
-- **Action cleanup**: `finally` block in `dump-action-template.ts` ora esegue solo `DeleteTerminal`, allineato al pattern KCR. Il pattern v1 a tre passi (`execute_server_terminal("exit 0")` → 500ms → `DeleteTerminal`) ereditato in v2.0.0 causava hang del finally quando la shell del `dockerCommand` era già exited (set -e + trap EXIT path): la promise SDK restava pendente all'infinito, con l'action che appariva "running" fino a riavvio container Komodo. In Komodo v2 `DeleteTerminal` da solo basta — il SDK termina la shell e libera risorse internamente.
-- **Retention semantic** (`backup.sh`): cambiata da calendar-based (`find -mtime +N -delete`) a N-most-recent. `RETENTION_DAYS` ora significa "mantieni gli ultimi N dump per database" indipendentemente dal calendario. Caso d'uso protetto: backup pausato per >N giorni — alla prima nuova copia gli archivi precedenti sopravvivono finché non vengono rimpiazzati uno-a-uno. Stessa policy applicata a logs (`backup_*.log`). Helper `_files_to_rotate()` centralizza la logica usata da rotate_backups + log retention + dry-run preview.
-- No breaking change a parametri/env vars: `RETENTION_DAYS=7` continua a esistere e funzionare; cambia solo la semantica (count anziché days). Per backup giornalieri tipici l'effetto pratico è identico.
-- No changes al container image — il fix retention è in `backup.sh` ma è incluso in `ghcr.io/kayaman78/kdd:latest` rebuild.
+### v2.0.2
+- Fixed `DeleteTerminal` params (was passing flat object, correct is `TerminalTarget`).
+- Removed `execute_server_terminal("exit 0")` from finally — causes permanent hang.
+- Image: pg-client 18, yq 4.53.3, mongodump 100.17.0.
 
-### v2.0.0 — Komodo v2 migration (breaking)
-- **Requires Komodo v2.** Migrated from `komodo.execute_terminal` (v1) to `komodo.execute_server_terminal` (v2 unified API).
-- Terminal initialization is now inline: `init: { command: "bash", recreate: Always }` is passed alongside the docker command in a single call, replacing the previous separate `CreateTerminal` step.
-- Cleanup pattern preserved: `execute_server_terminal("exit 0")` → 500ms grace period → `DeleteTerminal`. The cleanup call deliberately omits `init` — the terminal already exists from the run above and we don't want to spawn a new shell just to delete it.
-- Documented KDD's **single-instance-per-server design constraint**: both `containerName` and `terminalName` are hardcoded; concurrent KDD actions on the same server are not supported (would collide on the Docker container `--name` first). Defensive recreate (`recreate: Always` + `docker rm -f` in `trap EXIT`) handles residuals from previously killed/timed-out runs. If multi-action concurrency is needed in the future, both names must be made unique per-action (e.g. suffix with `runner_network`).
-- No changes to user-facing parameters: `server_name`, `runner_network`, `backup_networks`, `config_path`, `dump_path`, retention, timezone, SMTP/Telegram/ntfy/notify configs all work exactly as before.
-- No changes to the KDD container image (`backup.sh`, `setup.sh`, `entrypoint.sh`, `Dockerfile` untouched).
+### v2.0.1
+- Retention changed from calendar-based to N-most-recent.
+- Fixed action cleanup hang in finally block.
 
-### v1.2.0
-- Added `dry_run` parameter — set `"true"` to scan all configured databases and report what would be backed up without writing any files or touching retention; email subject shows `[🔍 DRY-RUN]`, push notifications include a dry-run summary, log shows a retention preview of what would be removed
-- Dry-run shows per-database rows in the HTML report with a 🔍 indicator and "skipped" verify status
-- Dry-run does not modify any files: no archives written, no retention deletions, no log cleanup
+### v2.0.0
+- Komodo v2 migration. `execute_server_terminal` with inline `init`.
 
-### v1.1.0
-- Fixed backup verification double-output bug — `_check_size_drop` was writing to stdout directly while callers also wrote their own message, producing two lines in `verify_result` and garbled HTML report entries; callers now capture `_check_size_drop` output via `$()` and relay it cleanly
-- Fixed `rotate_backups` retention off-by-one — was using `-mtime +RETENTION_DAYS` (keeps one extra day) instead of `-mtime +"$((RETENTION_DAYS - 1))"`, now consistent with DABS and DABV
-- Fixed `configure_msmtp` TLS configuration — `tls_starttls` was always set to `on`, breaking port 465 (SMTPS/immediate SSL); it is now derived from the port: `465` → `off`, all others → `on`
-- Added `timeout_seconds` parameter to the Komodo Action — prevents the action from hanging indefinitely if a backup stalls; default is 3600 seconds
-- All environment variable values in the Komodo Action `docker run` command are now single-quoted — prevents breakage when values contain spaces or special characters
-- Removed dead `size_result` variable in `verify_mysql_backup`
-
-### v1.0.9
-- Removed `--interactive` flag from `setup.sh` — interactive mode is now the only mode
-- Simplified `ask_confirm()` function, removed `INTERACTIVE` variable and related logic
-- Updated `SETUP.md` and `README.md` accordingly
-
-### v1.0.8
-- Added emoji icons to all log output in `backup.sh` for improved readability in Komodo logs
-
-### v1.0.7
-- Added Telegram push notifications (independent of email and ntfy)
-- Added ntfy push notifications (independent of email and Telegram)
-- Added `notify.attach_log` option to attach the daily log to push notifications
-- ntfy priority set to urgent automatically on backup or verify errors
-
-### v1.0.6
-- Added backup verification (gzip integrity, dump completion marker, size trend)
-- Added `SIZE_DROP_WARN` env var (default: 20%)
-- Email report now has separate Backup and Verify columns
-- Email subject now reflects verify outcome
-- Log files are now daily (`backup_YYYYMMDD.log`) stored in `/backups/log/`
-- Log retention now follows `RETENTION_DAYS`
-
-### v1.0.5
-- Added `backup_networks` parameter to connect container to multiple Docker networks
-- Improved network deduplication logic in Komodo Action
-
----
-
-## Related Projects
-
-| Project | Description |
-|---------|-------------|
-| [DABS](https://github.com/kayaman78/dabs) | Docker automated backup for SQLite |
-| [DABV](https://github.com/kayaman78/dabv) | Docker automated backup for volumes |
-| [KCR](https://github.com/kayaman78/kcr) | Komodo Action to run shell commands on remote servers |
+### v1.0.5–v1.2.0
+- Multi-network, verification, notifications (email/Telegram/ntfy), dry-run, TLS fix, timeout, retention fix.
 
 ---
 
 ## License
 
-MIT License - feel free to use, modify, and distribute.
-
-## Support
-
-For issues or questions, open an issue on GitHub.
+MIT
