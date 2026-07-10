@@ -569,7 +569,6 @@ if [ "$mysql_count" -gt 0 ]; then
 
         log "  📦 Backing up: $name"
 
-        local err_file
         err_file=$(mktemp)
 
         if mysqldump -h "$host" -P "$port" -u "$user" -p"$pass" \
@@ -646,7 +645,6 @@ if [ "$pg_count" -gt 0 ]; then
         log "  📦 Backing up: $name"
 
         export PGPASSWORD="$pass"
-        local err_file
         err_file=$(mktemp)
 
         if pg_dump -h "$host" -p "$port" -U "$user" -d "$db" \
@@ -724,7 +722,6 @@ if [ "$mongo_count" -gt 0 ]; then
 
         log "  📦 Backing up: $name"
 
-        local err_file
         err_file=$(mktemp)
 
         if mongodump --host="$host" --port="$port" --username="$user" \
